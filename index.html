@@ -1238,6 +1238,30 @@
     animation: modalIn 0.3s ease-out;
 }
     </style>
+<!-- ========================================================== -->
+    <!-- Favicon & PWA 配置（2026-07-21 更新） -->
+    <!-- ========================================================== -->
+    
+    <!-- 标准 Favicon -->
+    <link rel="icon" type="image/png" href="/nest/favicon-96x96.png?v=20260721" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/nest/favicon.svg?v=20260721" />
+    <link rel="shortcut icon" href="/nest/favicon.ico?v=20260721" />
+    
+    <!-- iOS Safari（主屏幕图标） -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/nest/apple-touch-icon.png?v=20260721" />
+    <meta name="apple-mobile-web-app-title" content="˚࿔ 𝐃𝐫𝐞𝐚𝐦⋆⟡.˚" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/nest/site.webmanifest?v=20260721" />
+    
+    <!-- Android PWA -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#c5a47e" />
+    <meta name="application-name" content="梦语" />
+    
+    <!-- ========================================================== -->
 </head>
 <body>
 <div class="app-container" id="app">
@@ -2703,13 +2727,14 @@ div.innerHTML = `
     }
 
 // ===================== 模拟伴侣回复 =====================
+// ===================== 模拟伴侣回复 =====================
 function simulateReply() {
     // 如果字卡库为空，不回复
     if (!state.wordCards || state.wordCards.length === 0) {
         return;
     }
 
-    if (Math.random() < 0.01) {  // 6% 概率触发拍一拍
+    if (Math.random() < 0.01) {  // 1% 概率触发拍一拍
         const partner = getCurrentPartner();
         if (partner && partner.online) {
             const pokePool = state.customPokes && state.customPokes.length > 0 
@@ -2766,23 +2791,16 @@ function simulateReply() {
         }
     }
 
-    // ===== 原有的显示「正在输入」逻辑 =====
+    // ===== 显示「正在输入」指示器（修复版） =====
     function showTypingIndicator() {
-        if (!state.settings.typingIndicatorEnabled) return;
-        const tiWrapper = document.getElementById('typing-indicator-wrapper');
-        const tiLabel = document.getElementById('typing-indicator-label');
-        const tiAvatar = document.getElementById('typing-indicator-avatar');
-        if (tiLabel) tiLabel.textContent = (settings.partnerName || '对方') + ' 正在输入';
+        if (!state.settings.showTyping) return;
+        const tiWrapper = document.getElementById('typingIndicator');
         if (tiWrapper) {
-            positionTypingIndicator();
             tiWrapper.style.display = 'block';
         }
-        if (tiAvatar) {
-            const partnerImg = DOMElements?.partner?.avatar?.querySelector('img');
-            tiAvatar.innerHTML = partnerImg ? `<img src="${partnerImg.src}">` : '<i class="fas fa-user"></i>';
-        }
-        if (DOMElements?.chatContainer) {
-            DOMElements.chatContainer.scrollTop = DOMElements.chatContainer.scrollHeight;
+        const chatContainer = document.getElementById('chatMessages');
+        if (chatContainer) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
     }
 
@@ -2834,18 +2852,9 @@ function simulateReply() {
                 saveState();
             }
             if (i === replyCount - 1) {
-                const tiWrapper = document.getElementById('typing-indicator-wrapper');
+                const tiWrapper = document.getElementById('typingIndicator');
                 if (tiWrapper) {
-                    const tiInner = tiWrapper.querySelector('.typing-indicator');
-                    if (tiInner) {
-                        tiInner.classList.add('hiding');
-                        setTimeout(() => {
-                            tiWrapper.style.display = 'none';
-                            if (tiInner) tiInner.classList.remove('hiding');
-                        }, 240);
-                    } else {
-                        tiWrapper.style.display = 'none';
-                    }
+                    tiWrapper.style.display = 'none';
                 }
             }
         }, delay);
@@ -5263,7 +5272,11 @@ function triggerContinueSpeaking() {
             updateStepsUI();
         }
         startStepCounter();
-        // ===== 双击伴侣头像触发拍一拍（事件委托 - 推荐方案） =====
+        
+        // ===== 新增：注册 Service Worker =====
+        registerServiceWorker();
+        checkPwaMode();
+// ===== 双击伴侣头像触发拍一拍（事件委托 - 推荐方案） =====
 document.addEventListener('dblclick', function(e) {
     // ✅ 直接查找 .avatar，无论它在哪里
     const avatar = e.target.closest('.avatar');
@@ -5456,6 +5469,49 @@ function sendPokeMessage(pokeText, partner) {
         }, delay);
     }
 }
+
+// ==========================================================
+    // Service Worker 注册 - 移到 init() 之前
+    // ==========================================================
+    function registerServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            console.log('[PWA] 浏览器支持 Service Worker');
+            navigator.serviceWorker.register('/nest/sw.js', {
+                scope: '/nest/'
+            })
+            .then(function(registration) {
+                console.log('[PWA] Service Worker 注册成功!');
+                console.log('[PWA] 作用域:', registration.scope);
+                registration.addEventListener('updatefound', function() {
+                    var newWorker = registration.installing;
+                    newWorker.addEventListener('statechange', function() {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            showNote('✨ 新版本已准备好，刷新即可更新', 'success');
+                        }
+                    });
+                });
+            })
+            .catch(function(error) {
+                console.warn('[PWA] Service Worker 注册失败:', error);
+            });
+            navigator.serviceWorker.addEventListener('controllerchange', function() {
+                console.log('[PWA] Service Worker 已接管页面');
+            });
+        } else {
+            console.log('[PWA] 当前浏览器不支持 Service Worker');
+        }
+    }
+    
+    function checkPwaMode() {
+        var isStandalone = window.navigator.standalone || 
+                           window.matchMedia('(display-mode: standalone)').matches;
+        if (isStandalone) {
+            console.log('[PWA] ✅ 应用在独立模式下运行');
+            document.body.classList.add('pwa-mode');
+        } else {
+            console.log('[PWA] ❌ 应用在浏览器中打开');
+        }
+    }
 
     init();
 })();
