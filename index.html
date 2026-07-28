@@ -47,6 +47,8 @@
             --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             --message-sent-text: #ffffff;
             --message-received-bg: #f0f0f0;
+                --chat-toolbar-bg: rgba(255, 255, 255, 0.6);
+    --chat-toolbar-blur: 12px;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -838,6 +840,8 @@
             --bubble-shadow-received: 0 1px 4px rgba(0, 0, 0, 0.4);
             --bubble-shadow-sent: 0 1px 4px rgba(0, 0, 0, 0.4);
             --nav-active: #f0ebe5;
+    --chat-toolbar-bg: rgba(30, 30, 38, 0.6);
+    --chat-toolbar-blur: 12px;
         }
         .script-text {
             font-family: 'Great Vibes', 'Alex Brush', cursive;
@@ -1242,6 +1246,47 @@
 .modal-content {
     animation: modalIn 0.3s ease-out;
 }
+/* ===== 自动回复文案列表样式（新增） ===== */
+.auto-reply-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    border: 1px solid rgba(0,0,0,0.04);
+    transition: var(--transition);
+}
+.auto-reply-item:hover { background: var(--accent-bg); }
+.auto-reply-item .radio-btn {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.auto-reply-item .radio-btn.active {
+    border-color: var(--accent);
+    background: var(--accent);
+}
+.auto-reply-item .radio-btn.active::after {
+    content: '✓';
+    color: #fff;
+    font-size: 11px;
+}
+.auto-reply-item .text { flex: 1; font-size: 13px; color: var(--text-primary); word-break: break-all; }
+.auto-reply-item .del-btn {
+    background: none; border: none;
+    color: var(--text-muted); cursor: pointer;
+    font-size: 14px; padding: 0 4px;
+    transition: var(--transition);
+}
+.auto-reply-item .del-btn:hover { color: var(--danger); }
     </style>
 <!-- ========================================================== -->
     <!-- Favicon & PWA 配置（2026-07-21 更新） -->
@@ -1278,12 +1323,16 @@
         <div class="typing-indicator" id="typingIndicator" style="margin: 0 16px;">
             <div class="typing-dots"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
         </div>
-        <div style="padding: 4px 16px 12px; flex-shrink: 0; position: relative;">
+        <div style="padding: 4px 16px 12px; flex-shrink: 0; position: relative; background: var(--chat-toolbar-bg); backdrop-filter: blur(var(--chat-toolbar-blur)); -webkit-backdrop-filter: blur(var(--chat-toolbar-blur));">
             <!-- 表情 + 深色模式 + 继续说（同一行） -->
 <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 4px 0; flex-shrink: 0; position: relative; z-index: 1;">
-    <button id="darkModeToggleBtn" style="background: transparent; border: none; font-size: 18px; color: var(--text-secondary); cursor: pointer; padding: 4px 8px; border-radius: 50%; transition: 0.2s;" title="切换深色模式">
-        <i class="fa-regular fa-moon"></i>
-    </button>
+    <!-- ===== 自动回复按钮（新增） ===== -->
+<button id="autoReplyBtn" style="background: transparent; border: none; font-size: 18px; color: var(--text-secondary); cursor: pointer; padding: 4px 8px; border-radius: 50%; transition: 0.2s;" title="自动回复">
+    <i class="fa-solid fa-reply-all"></i>
+</button>
+<button id="darkModeToggleBtn" style="background: transparent; border: none; font-size: 18px; color: var(--text-secondary); cursor: pointer; padding: 4px 8px; border-radius: 50%; transition: 0.2s;" title="切换深色模式">
+    <i class="fa-regular fa-moon"></i>
+</button>
     <button id="emojiBtn" style="background: transparent; border: none; font-size: 20px; color: var(--text-secondary); cursor: pointer; padding: 4px 8px; border-radius: 50%; transition: 0.2s;" title="表情包">
         <i class="fa-regular fa-face-smile"></i>
     </button>
@@ -1412,6 +1461,32 @@
         <div class="modal-buttons">
             <button class="modal-btn modal-btn-secondary" onclick="closeModal('editStatusModal')">取消</button>
             <button class="modal-btn modal-btn-primary" id="saveStatusBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 自动回复设置弹窗（新增） ===== -->
+<div class="modal-overlay" id="autoReplyModal">
+    <div class="modal-content">
+        <div class="modal-title"><i class="fa-regular fa-comment-dots"></i> 自动回复设置</div>
+        
+        <!-- 开关 -->
+        <div class="flex-row" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(0,0,0,0.04);">
+            <span style="font-size:14px;font-weight:500;">启用自动回复</span>
+            <div class="toggle" id="autoReplyToggle"></div>
+        </div>
+
+        <!-- 文案列表 -->
+        <div style="margin-top:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:13px;font-weight:500;">回复文案</span>
+                <button class="primary-btn" id="addAutoReplyTextBtn" style="padding:4px 12px;font-size:12px;">+ 添加</button>
+            </div>
+            <div id="autoReplyTextList" style="max-height:200px;overflow-y:auto;"></div>
+        </div>
+
+        <div class="modal-buttons">
+            <button class="modal-btn modal-btn-secondary" onclick="closeModal('autoReplyModal')">关闭</button>
         </div>
     </div>
 </div>
@@ -2162,39 +2237,44 @@ div.innerHTML = `
     ];
 
     function getDefaultState() {
-        return {
-            user: { name: '我', signature: '点击设置签名', avatar: '', customAvatar: '', height: '', weight: '', age: '', status: '在线' },
-            partners: JSON.parse(JSON.stringify(DEFAULT_PARTNERS)),
-            currentPartnerId: 'p1',
-            wordCards: [],
-            customStatuses: [],
-            settings: { 
-                minReplyDelay: 1,
-                maxReplyDelay: 5,
-                showReadReceipt: true, 
-                showTyping: true,
-                fontSize: 15,
-                autoMessageEnabled: false,
-                autoMessageMin: 5,
-                autoMessageMax: 15,
-                darkMode: false,
-                enableWordCardMerge: false,
-                wordCardTabName: '字卡箱',
-                statusTabName: '伴侣状态',
-                pureMode: false,
-                pokeTabName: '拍一拍'
-            },
-            _stats: { totalSent: 0, lastLogin: Date.now(), streak: 1, lastDate: new Date().toDateString() },
-            _lastRead: {},
-            todo: '',
-            _messageCache: {},
-            _version: CURRENT_VERSION,
-            steps: 0,
-            stepsDate: '',
-            customStamp: null,
-            _migrated: false
-        };
-    }
+    return {
+        user: { name: '我', signature: '点击设置签名', avatar: '', customAvatar: '', height: '', weight: '', age: '', status: '在线' },
+        partners: JSON.parse(JSON.stringify(DEFAULT_PARTNERS)),
+        currentPartnerId: 'p1',
+        wordCards: [],
+        customStatuses: [],
+        settings: { 
+            minReplyDelay: 1,
+            maxReplyDelay: 5,
+            showReadReceipt: true, 
+            showTyping: true,
+            fontSize: 15,
+            autoMessageEnabled: false,
+            autoMessageMin: 5,
+            autoMessageMax: 15,
+            darkMode: false,
+            enableWordCardMerge: false,
+            wordCardTabName: '字卡箱',
+            statusTabName: '伴侣状态',
+            pureMode: false,
+            pokeTabName: '拍一拍',
+            autoReply: {
+                enabled: false,
+                texts: ['好的，我知道了', '有事在忙，晚点回复你', '嗯嗯知道了', '好的稍等', '马上回来'],
+                selectedIndex: 0
+            }
+        },
+        _stats: { totalSent: 0, lastLogin: Date.now(), streak: 1, lastDate: new Date().toDateString() },
+        _lastRead: {},
+        todo: '',
+        _messageCache: {},
+        _version: CURRENT_VERSION,
+        steps: 0,
+        stepsDate: '',
+        customStamp: null,
+        _migrated: false
+    };
+}
 
     var state = getDefaultState();
     var storageWarningShown = false;
@@ -2268,7 +2348,15 @@ div.innerHTML = `
             try { var parsed = JSON.parse(stepsData); newState.steps = parsed.steps || 0; newState.stepsDate = parsed.stepsDate || ''; } catch(e) {}
         }
         var settingsData = parseOrFallback(STORAGE_KEYS.SETTINGS, {});
-        Object.assign(newState.settings, settingsData);
+Object.assign(newState.settings, settingsData);
+// ===== 新增：确保 autoReply 存在 =====
+if (!newState.settings.autoReply) {
+    newState.settings.autoReply = {
+        enabled: false,
+        texts: ['好的，我知道了', '有事在忙，晚点回复你', '嗯嗯知道了', '好的稍等', '马上回来'],
+        selectedIndex: 0
+    };
+}
         if (newState.settings.darkMode === undefined) newState.settings.darkMode = false;
         if (newState.settings.pureMode === undefined) newState.settings.pureMode = false;
         var currentPartnerIdData = safeGet(STORAGE_KEYS.CURRENT_PARTNER);
@@ -2861,6 +2949,8 @@ function simulateReply() {
                 if (tiWrapper) {
                     tiWrapper.style.display = 'none';
                 }
+// 在收到伴侣消息后调用
+checkAndSendAutoReply(state.currentPartnerId);
             }
         }, delay);
     }
@@ -2918,27 +3008,33 @@ function simulateReply() {
             if (state.settings.showTyping) { document.getElementById('typingIndicator').style.display = 'block'; }
         }, readDelay);
         setTimeout(async function() {
-            var count = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
-            for (var j = 0; j < count; j++) {
-                (function(idx) {
-                    setTimeout(async function() {
-                        const replyContent = await generateReplyContent(partnerId);
-                        if (replyContent) {
-                            const replyMsg = { sender: partnerId, timestamp: Date.now(), ...replyContent };
-                            const replyId = await saveMessageToDB(partnerId, replyMsg);
-                            replyMsg.id = replyId;
-                            if (state.currentPartnerId === partnerId && chatLoader) {
-                                if (idx === count - 1) document.getElementById('typingIndicator').style.display = 'none';
-                                chatLoader.appendMessage(replyMsg);
-                                if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
-                            }
-                        }
-                        updateBadge();
-                        saveState();
-                    }, idx * 1200);
-                })(j);
-            }
-        }, readDelay + replyDelay);
+    var count = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
+    for (var j = 0; j < count; j++) {
+        (function(idx) {
+            setTimeout(async function() {
+                const replyContent = await generateReplyContent(partnerId);
+                if (replyContent) {
+                    const replyMsg = { sender: partnerId, timestamp: Date.now(), ...replyContent };
+                    const replyId = await saveMessageToDB(partnerId, replyMsg);
+                    replyMsg.id = replyId;
+                    if (state.currentPartnerId === partnerId && chatLoader) {
+                        if (idx === count - 1) document.getElementById('typingIndicator').style.display = 'none';
+                        chatLoader.appendMessage(replyMsg);
+                        if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
+                    }
+                }
+                updateBadge();
+                saveState();
+
+                // ===== 新增：伴侣回复后，检测自动回复 =====
+                // 只在最后一条回复发送后触发自动回复
+                if (idx === count - 1) {
+                    checkAndSendAutoReply(partnerId);
+                }
+            }, idx * 1200);
+        })(j);
+    }
+}, readDelay + replyDelay);
     };
 
     // 发送表情（用户主动）
@@ -5225,6 +5321,214 @@ function triggerContinueSpeaking() {
         }, delay + i * 500);
     }
 }
+
+// ============================================================
+// 自动回复功能（新增）
+// ============================================================
+
+function initAutoReply() {
+    // 默认数据
+    if (!state.settings.autoReply) {
+        state.settings.autoReply = {
+            enabled: false,
+            texts: ['好的，我知道了', '有事在忙，晚点回复你', '嗯嗯知道了', '好的稍等', '马上回来'],
+            selectedIndex: 0
+        };
+        saveState();
+    }
+
+    // 绑定按钮事件
+    const btn = document.getElementById('autoReplyBtn');
+    if (btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openAutoReplyModal();
+        });
+    }
+
+    // 绑定弹窗内的事件
+    document.getElementById('autoReplyModal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal('autoReplyModal');
+    });
+
+    // 添加文案按钮
+    const addBtn = document.getElementById('addAutoReplyTextBtn');
+    if (addBtn) {
+        addBtn.addEventListener('click', function() {
+            const newText = prompt('请输入自动回复文案：');
+            if (newText && newText.trim()) {
+                state.settings.autoReply.texts.push(newText.trim());
+                state.settings.autoReply.selectedIndex = state.settings.autoReply.texts.length - 1;
+                saveState();
+                renderAutoReplyList();
+                showNote('已添加', 'success');
+            }
+        });
+    }
+
+    // 开关点击
+    const toggle = document.getElementById('autoReplyToggle');
+    if (toggle) {
+        toggle.addEventListener('click', function() {
+            this.classList.toggle('active');
+            state.settings.autoReply.enabled = this.classList.contains('active');
+            saveState();
+            showNote(state.settings.autoReply.enabled ? '自动回复已开启' : '自动回复已关闭', 'info');
+        });
+    }
+}
+
+function openAutoReplyModal() {
+    const modal = document.getElementById('autoReplyModal');
+    if (!modal) return;
+    modal.classList.add('show');
+
+    // 更新开关状态
+    const toggle = document.getElementById('autoReplyToggle');
+    if (toggle) {
+        if (state.settings.autoReply.enabled) {
+            toggle.classList.add('active');
+        } else {
+            toggle.classList.remove('active');
+        }
+    }
+
+    renderAutoReplyList();
+}
+
+function renderAutoReplyList() {
+    const container = document.getElementById('autoReplyTextList');
+    if (!container) return;
+
+    const texts = state.settings.autoReply.texts || [];
+    const selectedIndex = state.settings.autoReply.selectedIndex || 0;
+
+    if (texts.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">还没有文案，点击「添加」创建</div>';
+        return;
+    }
+
+    let html = '';
+    texts.forEach((text, index) => {
+        const isSelected = index === selectedIndex;
+        html += `
+            <div class="auto-reply-item">
+                <div class="radio-btn ${isSelected ? 'active' : ''}" data-index="${index}"></div>
+                <span class="text" style="cursor:pointer;" onclick="editAutoReplyText(${index})" title="点击编辑">${escapeHTML(text)}</span>
+                <button class="del-btn" data-index="${index}"><i class="fa-regular fa-trash-can"></i></button>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+
+    // 事件绑定：单选
+    container.querySelectorAll('.radio-btn').forEach(el => {
+        el.addEventListener('click', function() {
+            const idx = parseInt(this.dataset.index);
+            state.settings.autoReply.selectedIndex = idx;
+            saveState();
+            renderAutoReplyList();
+            showNote('已选择该文案', 'success');
+        });
+    });
+
+    // 事件绑定：删除
+    container.querySelectorAll('.del-btn').forEach(el => {
+        el.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const idx = parseInt(this.dataset.index);
+            const texts = state.settings.autoReply.texts;
+            if (texts.length <= 1) {
+                showNote('至少保留一条文案', 'warning');
+                return;
+            }
+            if (!confirm('删除此文案？')) return;
+            texts.splice(idx, 1);
+            // 如果删除的是选中的，选第一条
+            if (state.settings.autoReply.selectedIndex === idx) {
+                state.settings.autoReply.selectedIndex = 0;
+            } else if (state.settings.autoReply.selectedIndex > idx) {
+                state.settings.autoReply.selectedIndex--;
+            }
+            saveState();
+            renderAutoReplyList();
+            showNote('已删除', 'success');
+        });
+    });
+}
+
+// 获取选中的自动回复文案
+function getAutoReplyText() {
+    const autoReply = state.settings.autoReply;
+    if (!autoReply || !autoReply.enabled) return null;
+    const texts = autoReply.texts || [];
+    const idx = autoReply.selectedIndex || 0;
+    if (texts.length === 0) return null;
+    if (idx >= texts.length) return texts[0];
+    return texts[idx] || texts[0];
+}
+// 编辑自动回复文案（暴露到全局）
+window.editAutoReplyText = function(index) {
+    const texts = state.settings.autoReply.texts;
+    if (!texts || index < 0 || index >= texts.length) return;
+    
+    const oldText = texts[index];
+    const newText = prompt('编辑自动回复文案：', oldText);
+    
+    if (newText !== null && newText.trim() !== '') {
+        texts[index] = newText.trim();
+        saveState();
+        renderAutoReplyList();
+        showNote('文案已更新', 'success');
+    } else if (newText !== null && newText.trim() === '') {
+        showNote('文案不能为空', 'warning');
+    }
+};
+
+async function checkAndSendAutoReply(partnerId) {
+    // 获取自动回复文案
+    const replyText = getAutoReplyText();
+    if (!replyText) return; // 未启用或没有文案
+
+    const partner = getPartner(partnerId);
+    if (!partner || !partner.online) return;
+
+    // 检查是否是自己发送的消息（避免死循环）
+    // 这里 partnerId 是对方，所以回复的是自己
+    // 但自动回复是用户自己回复对方，所以 sender 是 'user'
+    
+    // 延迟1-3秒回复（更像真人）
+    const delay = 1000 + Math.random() * 2000;
+    
+    setTimeout(async function() {
+        // 再次检查状态（防止在延迟期间关闭）
+        if (!state.settings.autoReply || !state.settings.autoReply.enabled) return;
+        
+        const msg = {
+            sender: 'user',
+            text: replyText,
+            timestamp: Date.now(),
+            status: 'sent'
+        };
+        
+        try {
+            const savedId = await saveMessageToDB(partnerId, msg);
+            msg.id = savedId;
+            
+            // 如果当前正在查看该伴侣的聊天，实时显示
+            if (state.currentPartnerId === partnerId && chatLoader) {
+                chatLoader.appendMessage(msg);
+                chatLoader.scrollToBottom();
+            }
+            
+            updateBadge();
+            saveState();
+        } catch (e) {
+            console.error('自动回复发送失败:', e);
+        }
+    }, delay);
+}
     // ===================== 初始化 =====================
     async function init() {
         state = loadState();
@@ -5305,6 +5609,8 @@ document.addEventListener('dblclick', function(e) {
         return;
     }
      });
+// ===== 自动回复功能初始化 =====
+initAutoReply();
     }  // ← init() 函数在这里结束
 
     function triggerPokeFromAvatar() {
