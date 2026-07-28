@@ -1,121 +1,37 @@
 // ============================================================
-// 梦语 PWA - Service Worker
+// Service Worker 卸载脚本
+// 作用：清除所有缓存，然后让 SW 自我销毁，不再拦截请求
 // ============================================================
 
-var CACHE_VERSION = 'v1';
-var CACHE_NAME = 'mengyu-' + CACHE_VERSION;
-
-// 需要缓存的静态资源（根据实际文件调整）
-var STATIC_ASSETS = [
-  '/nest/',
-  '/nest/index.html',
-  '/nest/site.webmanifest',
-  '/nest/favicon-96x96.png',
-  '/nest/favicon.svg',
-  '/nest/favicon.ico',
-  '/nest/apple-touch-icon.png',
-  '/nest/icons/icon-192.png',
-  '/nest/icons/icon-512.png'
-];
-
-// ============================================================
-// 安装事件 - 预缓存资源
-// ============================================================
-self.addEventListener('install', function(event) {
-  console.log('[SW] 安装中...');
-  
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(function(cache) {
-        console.log('[SW] 开始缓存静态资源');
-        return cache.addAll(STATIC_ASSETS);
-      })
-      .then(function() {
-        console.log('[SW] 缓存完成');
-        return self.skipWaiting();
-      })
-      .catch(function(error) {
-        console.error('[SW] 缓存失败:', error);
-        return self.skipWaiting();
-      })
-  );
+// 安装时立即激活，不等旧的 SW
+self.addEventListener('install', function(e) {
+    console.log('[卸载SW] 安装中，立即激活');
+    self.skipWaiting();
 });
 
-// ============================================================
-// 激活事件 - 清理旧缓存
-// ============================================================
-self.addEventListener('activate', function(event) {
-  console.log('[SW] 激活中...');
-  
-  event.waitUntil(
-    caches.keys()
-      .then(function(cacheNames) {
-        return Promise.all(
-          cacheNames
-            .filter(function(name) {
-              return name !== CACHE_NAME && name.startsWith('mengyu-');
-            })
-            .map(function(name) {
-              console.log('[SW] 删除旧缓存:', name);
-              return caches.delete(name);
-            })
-        );
-      })
-      .then(function() {
-        console.log('[SW] 激活完成');
-        return self.clients.claim();
-      })
-  );
-});
-
-// ============================================================
-// 请求拦截 - 缓存优先策略
-// ============================================================
-self.addEventListener('fetch', function(event) {
-  var request = event.request;
-  var url = new URL(request.url);
-  
-  // 只处理 GET 请求
-  if (request.method !== 'GET') {
-    return;
-  }
-  
-  // 只处理同源请求
-  if (url.origin !== location.origin) {
-    return;
-  }
-  
-  event.respondWith(
-    caches.match(request)
-      .then(function(cachedResponse) {
-        // 有缓存则返回缓存
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        
-        // 无缓存则从网络获取
-        return fetch(request)
-          .then(function(response) {
-            // 只缓存成功的响应
-            if (response && response.status === 200) {
-              var cloned = response.clone();
-              caches.open(CACHE_NAME)
-                .then(function(cache) {
-                  cache.put(request, cloned);
+// 激活时清除所有缓存，然后释放控制权
+self.addEventListener('activate', function(e) {
+    console.log('[卸载SW] 激活中，清除所有缓存...');
+    e.waitUntil(
+        caches.keys().then(function(cacheNames) {
+            console.log('[卸载SW] 找到缓存:', cacheNames);
+            return Promise.all(
+                cacheNames.map(function(cacheName) {
+                    console.log('[卸载SW] 删除缓存:', cacheName);
+                    return caches.delete(cacheName);
                 })
-                .catch(function() {});
-            }
-            return response;
-          })
-          .catch(function() {
-            // 完全离线时返回一个简单的提示
-            return new Response('离线状态，请连接网络后重试', {
-              status: 503,
-              headers: { 'Content-Type': 'text/plain' }
-            });
-          });
-      })
-  );
+            );
+        }).then(function() {
+            console.log('[卸载SW] 所有缓存已清除，开始接管页面');
+            return self.clients.claim();
+        })
+    );
 });
 
-console.log('[SW] 梦语 Service Worker 已加载');
+// 不拦截任何请求，直接放行（相当于 SW 不存在）
+self.addEventListener('fetch', function(e) {
+    // 直接去服务器请求，不读缓存
+    e.respondWith(fetch(e.request));
+});
+
+console.log('[卸载SW] Service Worker 已进入卸载模式');
