@@ -2281,10 +2281,6 @@ div.innerHTML = `
 }
 
     var state = getDefaultState();
-// ===== 字卡随机抽取冷却机制 =====
-let recentPicks = [];      // 记录最近抽过的卡索引
-const RECENT_SIZE = 3;     // 最近 N 张不重复
-let lastPickedIndex = -1;  // 上一次抽到的索引
     var storageWarningShown = false;
     var contextMsgId = null;
     var currentQuote = null;
@@ -2780,62 +2776,25 @@ if (!newState.settings.autoReply) {
     }
 
     // ---------- 回复生成（支持表情包） ----------
-    function getRandomReply() {
+    // 最初版本（纯随机）
+function getRandomReply() {
     if (!state.wordCards || state.wordCards.length === 0) return null;
-    
-    const cards = state.wordCards;
-    const total = cards.length;
-    
-    // ===== 1 张卡：直接返回（最快路径） =====
-    if (total === 1) return cards[0];
-    
-    // ===== 2-3 张卡：简单去重 =====
-    if (total <= 3) {
-        let index;
-        let attempts = 0;
-        do {
-            index = Math.floor(Math.random() * total);
-            attempts++;
-        } while (index === lastPickedIndex && attempts < 10 && total > 1);
-        
-        lastPickedIndex = index;
-        return cards[index];
-    }
-    
-    // ===== 4+ 张卡：加权 + 冷却 =====
-    // 清理过大的 recentPicks（安全保护）
-    if (recentPicks.length > RECENT_SIZE) {
-        recentPicks = recentPicks.slice(-RECENT_SIZE);
-    }
-    
-    const weights = cards.map((_, index) => {
-        const baseWeight = 1 + 0.5 * (total - index) / total;
-        const isRecent = recentPicks.includes(index);
-        return Math.max(0.1, baseWeight * (isRecent ? 0.25 : 1.0));
-    });
-    
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    let random = Math.random() * totalWeight;
-    let pickedIndex = 0;
-    
-    for (let i = 0; i < cards.length; i++) {
-        random -= weights[i];
-        if (random <= 0) {
-            pickedIndex = i;
-            break;
-        }
-    }
-    
-    // 更新冷却列表
-    recentPicks.push(pickedIndex);
-    if (recentPicks.length > RECENT_SIZE) {
-        recentPicks.shift();
-    }
-    lastPickedIndex = pickedIndex;
-    
-    return cards[pickedIndex];
+    return state.wordCards[Math.floor(Math.random() * state.wordCards.length)];
 }
 
+// 只改 getMergedReply()（让拼卡更均匀）
+function getMergedReply() {
+    if (!state.wordCards || state.wordCards.length === 0) return null;
+    const cards = state.wordCards;
+    const total = cards.length;
+    const count = Math.min(Math.floor(Math.random() * 7) + 1, total);
+    const shuffled = [...cards];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, count).join('，');
+}
 
     async function getRandomEmoji() {
         const emojis = await getAllEmojis();
@@ -2872,7 +2831,6 @@ if (!newState.settings.autoReply) {
         }
     }
 
-// ===================== 模拟伴侣回复 =====================
 // ===================== 模拟伴侣回复 =====================
 function simulateReply() {
     // 如果字卡库为空，不回复
