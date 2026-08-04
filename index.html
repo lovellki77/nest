@@ -435,7 +435,7 @@
             left: 50%;
             transform: translateX(-50%);
             background: var(--bg-notification);
-            color: var(--text-primary);
+            color: #1a1a1a;
             padding: 10px 20px;
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-md);
@@ -535,7 +535,7 @@
         .wordcard-item .edit-badge { left: -6px; background: rgba(160,170,180,0.9); }
         .wordcard-item:hover .delete-badge, .wordcard-item:hover .edit-badge { opacity: 1; transform: scale(1); }
         .wordcard-add-btn {
-            background: rgba(255,255,255,0.5);
+            background: var(--bg-wordcard);
             border: 2px dashed rgba(197, 164, 126, 0.3);
             border-radius: var(--radius-sm);
             padding: 10px; font-size: 24px;
@@ -548,7 +548,7 @@
         .wordcard-action-btn {
             padding: 6px 14px; border-radius: 20px;
             border: 1px solid rgba(197, 164, 126, 0.2);
-            background: rgba(255,255,255,0.6); color: var(--text-secondary);
+            background: var(--bg-wordcard); color: var(--text-secondary);
             font-size: 12px; cursor: pointer; transition: var(--transition);
             font-family: var(--font-family); outline: none;
         }
@@ -845,6 +845,7 @@
             --nav-active: #f0ebe5;
     --chat-toolbar-bg: rgba(30, 30, 38, 0.6);
     --chat-toolbar-blur: 12px;
+    --bg-wordcard: rgba(255, 255, 255, 0.08);
         }
         .script-text {
             font-family: 'Great Vibes', 'Alex Brush', cursive;
@@ -858,7 +859,7 @@
         input, textarea, select { background: var(--bg-input); color: var(--text-primary); border-color: var(--border-light); }
         input:focus, textarea:focus, select:focus { background: var(--bg-input-focus); }
         .modal-content { background: var(--bg-modal); }
-        .notification { background: var(--bg-notification); color: var(--text-primary); }
+        .notification { background: var(--bg-notification); color: #1a1a1a; }
         .bubble {
             border-radius: var(--radius-md, 16px);
             color: var(--bubble-text);
@@ -2280,6 +2281,10 @@ div.innerHTML = `
 }
 
     var state = getDefaultState();
+// ===== 字卡随机抽取冷却机制 =====
+let recentPicks = [];      // 记录最近抽过的卡索引
+const RECENT_SIZE = 3;     // 最近 N 张不重复
+let lastPickedIndex = -1;  // 上一次抽到的索引
     var storageWarningShown = false;
     var contextMsgId = null;
     var currentQuote = null;
@@ -2776,17 +2781,59 @@ if (!newState.settings.autoReply) {
 
     // ---------- 回复生成（支持表情包） ----------
     function getRandomReply() {
-        return state.wordCards.length ? state.wordCards[Math.floor(Math.random() * state.wordCards.length)] : null;
+    if (!state.wordCards || state.wordCards.length === 0) return null;
+    
+    const cards = state.wordCards;
+    const total = cards.length;
+    
+    // 如果字卡太少（≤3张），用纯随机 + 简单去重
+    if (total <= 3) {
+        let index;
+        let attempts = 0;
+        do {
+            index = Math.floor(Math.random() * total);
+            attempts++;
+        } while (index === lastPickedIndex && attempts < 20);
+        lastPickedIndex = index;
+        return cards[index];
     }
-
-    function getMergedReply() {
-        if (!state.wordCards.length) return null;
-        const count = Math.floor(Math.random() * 7) + 1;
-        const shuffled = [...state.wordCards].sort(() => Math.random() - 0.5);
-        const selected = shuffled.slice(0, count);
-        return selected.join('，');
+    
+    // ===== 组合方案：加权 + 冷却 =====
+    // 计算每张卡的权重
+    const weights = cards.map((_, index) => {
+        // 1. 基础权重：新卡权重低，旧卡权重高
+        // 越新的卡（index 越大）权重越低
+        const baseWeight = 1 + 0.5 * (total - index) / total;
+        
+        // 2. 冷却惩罚：最近抽过的卡权重大幅降低
+        const isRecent = recentPicks.includes(index);
+        const recentPenalty = isRecent ? 0.15 : 1.0; // 最近卡权重只剩 15%
+        
+        return baseWeight * recentPenalty;
+    });
+    
+    // 加权随机抽取
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let random = Math.random() * totalWeight;
+    let pickedIndex = 0;
+    
+    for (let i = 0; i < cards.length; i++) {
+        random -= weights[i];
+        if (random <= 0) {
+            pickedIndex = i;
+            break;
+        }
     }
-
+    
+    // 更新最近列表（保持最近 RECENT_SIZE 条）
+    recentPicks.push(pickedIndex);
+    if (recentPicks.length > RECENT_SIZE) {
+        recentPicks.shift();
+    }
+    
+    lastPickedIndex = pickedIndex;
+    return cards[pickedIndex];
+}
     async function getRandomEmoji() {
         const emojis = await getAllEmojis();
         if (emojis.length === 0) return null;
