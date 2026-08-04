@@ -2786,33 +2786,34 @@ if (!newState.settings.autoReply) {
     const cards = state.wordCards;
     const total = cards.length;
     
-    // 如果字卡太少（≤3张），用纯随机 + 简单去重
+    // ===== 1 张卡：直接返回（最快路径） =====
+    if (total === 1) return cards[0];
+    
+    // ===== 2-3 张卡：简单去重 =====
     if (total <= 3) {
         let index;
         let attempts = 0;
         do {
             index = Math.floor(Math.random() * total);
             attempts++;
-        } while (index === lastPickedIndex && attempts < 20);
+        } while (index === lastPickedIndex && attempts < 10 && total > 1);
+        
         lastPickedIndex = index;
         return cards[index];
     }
     
-    // ===== 组合方案：加权 + 冷却 =====
-    // 计算每张卡的权重
+    // ===== 4+ 张卡：加权 + 冷却 =====
+    // 清理过大的 recentPicks（安全保护）
+    if (recentPicks.length > RECENT_SIZE) {
+        recentPicks = recentPicks.slice(-RECENT_SIZE);
+    }
+    
     const weights = cards.map((_, index) => {
-        // 1. 基础权重：新卡权重低，旧卡权重高
-        // 越新的卡（index 越大）权重越低
         const baseWeight = 1 + 0.5 * (total - index) / total;
-        
-        // 2. 冷却惩罚：最近抽过的卡权重大幅降低
         const isRecent = recentPicks.includes(index);
-        const recentPenalty = isRecent ? 0.15 : 1.0; // 最近卡权重只剩 15%
-        
-        return baseWeight * recentPenalty;
+        return Math.max(0.1, baseWeight * (isRecent ? 0.25 : 1.0));
     });
     
-    // 加权随机抽取
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let random = Math.random() * totalWeight;
     let pickedIndex = 0;
@@ -2825,15 +2826,17 @@ if (!newState.settings.autoReply) {
         }
     }
     
-    // 更新最近列表（保持最近 RECENT_SIZE 条）
+    // 更新冷却列表
     recentPicks.push(pickedIndex);
     if (recentPicks.length > RECENT_SIZE) {
         recentPicks.shift();
     }
-    
     lastPickedIndex = pickedIndex;
+    
     return cards[pickedIndex];
 }
+
+
     async function getRandomEmoji() {
         const emojis = await getAllEmojis();
         if (emojis.length === 0) return null;
