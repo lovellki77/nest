@@ -411,6 +411,11 @@
             box-shadow: 0 1px 4px rgba(0,0,0,0.1);
         }
         .toggle.active::after { left: 22px; }
+        .typing-partner-avatars { display:flex; align-items:center; min-width:28px; margin-right:4px; }
+        .typing-partner-avatar { width:26px; height:26px; border-radius:50%; overflow:hidden; background:var(--avatar-bg); border:2px solid var(--chat-toolbar-bg); margin-left:-7px; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+        .typing-partner-avatar:first-child { margin-left:0; }
+        .typing-partner-avatar img { width:100%; height:100%; object-fit:cover; }
+        .typing-partner-label { margin-left:5px; font-size:12px; color:var(--text-secondary); }
         .typing-indicator {
             align-self: flex-start;
             background: var(--message-received-bg);
@@ -1450,7 +1455,9 @@ html.dark-mode .inAppToast .toast-btn-secondary {
         <div id="chatMessages" style="flex: 1; overflow-y: auto; padding: 0 16px 16px; display: flex; flex-direction: column;"></div>
         <div id="loadMoreArea" style="padding: 0 16px;"></div>
         <div class="typing-indicator" id="typingIndicator" style="margin: 0 16px;">
+            <div class="typing-partner-avatars" id="typingPartnerAvatars"></div>
             <div class="typing-dots"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
+            <div class="typing-partner-label" id="typingPartnerLabel">正在输入...</div>
         </div>
         <div style="padding: 4px 16px 12px; flex-shrink: 0; position: relative; background: var(--chat-toolbar-bg); backdrop-filter: blur(var(--chat-toolbar-blur)); -webkit-backdrop-filter: blur(var(--chat-toolbar-blur));">
             <!-- 表情 + 深色模式 + 继续说（同一行） -->
@@ -3154,9 +3161,11 @@ if (!newState.settings.autoReply) {
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
         var nav = document.querySelector('[data-screen="'+name+'"]');
         if (nav) nav.classList.add('active');
-        if (name === 'main') renderMain();
+        if (name === 'main') { stopChatSync(); renderMain(); }
         if (name === 'chat') { renderChat(); clearUnread(); }
-        if (name === 'settings') renderSettingsMain();
+        if (name === 'settings') { stopChatSync(); renderSettingsMain(); }
+        // 导航切换本身也必须刷新未读徽标，不能依赖再次进入聊天页。
+        setTimeout(updateBadge, 0);
         hideContextMenu();
     }
 
@@ -3456,6 +3465,7 @@ if (!newState.settings.autoReply) {
         chatLoader.init().then(() => {
             if (renderVersion !== currentVersion) return;
             chatInitialized = true;
+            startChatSync();
             document.getElementById('chatInput').value = '';
             updateCharCount();
             clearUnread();
@@ -3523,17 +3533,76 @@ function getMergedReply() {
         }
     }
 
+// ===================== 统一消息/正在输入状态管理 =====================
+window.__typingPartners = window.__typingPartners || new Set();
+window.__typingPartnerId = null;
+function setPartnerTyping(partnerId, active) {
+    if (!partnerId) return;
+    if (active) window.__typingPartners.add(partnerId);
+    else window.__typingPartners.delete(partnerId);
+    window.__typingPartnerId = window.__typingPartners.size ? Array.from(window.__typingPartners)[window.__typingPartners.size - 1] : null;
+    renderTypingPartners();
+}
+function renderTypingPartners() {
+    const wrap = document.getElementById('typingIndicator');
+    const avatars = document.getElementById('typingPartnerAvatars');
+    const label = document.getElementById('typingPartnerLabel');
+    if (!wrap || !avatars) return;
+    const ids = Array.from(window.__typingPartners).filter(id => getPartner(id));
+    avatars.innerHTML = ids.map(id => {
+        const p = getPartner(id);
+        return `<div class="typing-partner-avatar" title="${escapeHTML(p.name || '伴侣')}">${avatarHTML(p.avatar, p.customAvatar)}</div>`;
+    }).join('');
+    if (label) label.textContent = ids.length ? (ids.length === 1 ? `${getPartner(ids[0]).name || '对方'} 正在输入...` : `${ids.length} 位伴侣正在输入...`) : '正在输入...';
+    wrap.style.display = (state.settings.showTyping && ids.length) ? 'flex' : 'none';
+}
+function showPartnerTyping(partnerId) {
+    if (!state.settings.showTyping) return;
+    setPartnerTyping(partnerId, true);
+    const c = document.getElementById('chatMessages');
+    if (c && state.currentPartnerId === partnerId) c.scrollTop = c.scrollHeight;
+}
+function hidePartnerTyping(partnerId) { setPartnerTyping(partnerId, false); }
+
+// 当前聊天实时同步：以 IndexedDB 为最终事实来源，避免 Safari/PWA 中直接 append 的生命周期差异。
+let chatSyncTimer = null;
+async function syncCurrentChatFromDB() {
+    try {
+        if (!chatLoader || chatLoader.isDestroyed) return;
+        const partnerId = state.currentPartnerId;
+        if (!partnerId || chatLoader.partnerId !== partnerId) return;
+        await chatLoader._refreshFromDB();
+        updateBadge();
+        renderTypingPartners();
+    } catch (e) { console.warn('[ChatSync] 刷新失败:', e); }
+}
+function startChatSync() {
+    if (chatSyncTimer) clearInterval(chatSyncTimer);
+    chatSyncTimer = setInterval(() => { if (!document.hidden) syncCurrentChatFromDB(); }, 5000);
+    setTimeout(syncCurrentChatFromDB, 150);
+}
+function stopChatSync() {
+    if (chatSyncTimer) { clearInterval(chatSyncTimer); chatSyncTimer = null; }
+}
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        stopChatSync();
+    } else {
+        startChatSync();
+    }
+});
+
 // ===================== 模拟伴侣回复 =====================
 function simulateReply() {
     const replyPartnerId = state.currentPartnerId;
-    window.__typingPartnerId = replyPartnerId;
+    showPartnerTyping(replyPartnerId);
     // 如果字卡库为空，不回复
     if (!state.wordCards || state.wordCards.length === 0) {
         return;
     }
 
     if (Math.random() < 0.01) {  // 1% 概率触发拍一拍
-        const partner = getCurrentPartner();
+        const partner = getPartner(replyPartnerId);
         if (partner && partner.online) {
             const pokePool = state.customPokes && state.customPokes.length > 0 
                 ? state.customPokes 
@@ -3557,7 +3626,9 @@ function simulateReply() {
                 chatLoader.scrollToBottom();
                 saveMessageToDB(replyPartnerId, pokeMsg).then(function() {
                     notifyBarkForPartnerMessage(replyPartnerId, pokeMsg, 'poke');
+                    hidePartnerTyping(replyPartnerId);
                 }).catch(function(err) {
+                    hidePartnerTyping(replyPartnerId);
                     console.error('保存拍一拍消息失败:', err);
                 });
             }
@@ -3590,22 +3661,6 @@ function simulateReply() {
             return;  // 拍一拍后不再发送普通回复
         }
     }
-
-    // ===== 显示「正在输入」指示器（修复版） =====
-    function showTypingIndicator() {
-        if (!state.settings.showTyping) return;
-        if (window.__typingPartnerId !== replyPartnerId) return;
-        const tiWrapper = document.getElementById('typingIndicator');
-        if (tiWrapper) {
-            tiWrapper.style.display = 'block';
-        }
-        const chatContainer = document.getElementById('chatMessages');
-        if (chatContainer) {
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-    }
-
-    showTypingIndicator();
 
     // 标记已读
     let changed = false;
@@ -3654,10 +3709,7 @@ function simulateReply() {
             }
             if (i === replyCount - 1) {
                 const tiWrapper = document.getElementById('typingIndicator');
-                if (tiWrapper && window.__typingPartnerId === replyPartnerId) {
-                    tiWrapper.style.display = 'none';
-                    window.__typingPartnerId = null;
-                }
+                hidePartnerTyping(replyPartnerId);
 // 在收到伴侣消息后调用
 checkAndSendAutoReply(state.currentPartnerId);
             }
@@ -3714,7 +3766,7 @@ checkAndSendAutoReply(state.currentPartnerId);
                 });
                 Promise.all(updatePromises).catch(e => console.error('更新已读状态失败', e));
             }
-            if (state.settings.showTyping) { document.getElementById('typingIndicator').style.display = 'block'; }
+            showPartnerTyping(partnerId);
         }, readDelay);
         setTimeout(async function() {
     var count = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
@@ -3728,7 +3780,7 @@ checkAndSendAutoReply(state.currentPartnerId);
                     replyMsg.id = replyId;
                     notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                     if (state.currentPartnerId === partnerId && chatLoader) {
-                        if (idx === count - 1) document.getElementById('typingIndicator').style.display = 'none';
+                        if (idx === count - 1) hidePartnerTyping(partnerId);
                         chatLoader.appendMessage(replyMsg);
                         if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
                     }
@@ -3788,7 +3840,7 @@ checkAndSendAutoReply(state.currentPartnerId);
                 });
                 Promise.all(updatePromises).catch(e => console.error('更新已读状态失败', e));
             }
-            if (state.settings.showTyping) { document.getElementById('typingIndicator').style.display = 'block'; }
+            showPartnerTyping(partnerId);
         }, readDelay);
         setTimeout(async function() {
             var count = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
@@ -3802,7 +3854,7 @@ checkAndSendAutoReply(state.currentPartnerId);
                             replyMsg.id = replyId;
                             notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                             if (state.currentPartnerId === partnerId && chatLoader) {
-                                if (idx === count - 1) document.getElementById('typingIndicator').style.display = 'none';
+                                if (idx === count - 1) hidePartnerTyping(partnerId);
                                 chatLoader.appendMessage(replyMsg);
                                 if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
                             }
@@ -6183,55 +6235,37 @@ function hideProgressNote() {
 
     // ===================== 自动消息 =====================
     function scheduleAutoMessage() {
-    // 清除已有定时器，防止堆积
-    if (autoMsgTimer) {
-        clearTimeout(autoMsgTimer);
-        autoMsgTimer = null;
-    }
-    // 如果功能关闭，直接返回
+    if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
     if (!state.settings.autoMessageEnabled) return;
-
     var min = Math.max(1, state.settings.autoMessageMin || 5);
     var max = Math.max(min, state.settings.autoMessageMax || 15);
     var delayMinutes = min + Math.random() * (max - min);
-
-    autoMsgTimer = setTimeout(async function() {
-        // 关键修复：定时器触发时再次检查开关状态
-        if (!state.settings.autoMessageEnabled) {
-            autoMsgTimer = null;
-            return;
-        }
-
+    window.__autoMessageDueAt = Date.now() + delayMinutes * 60 * 1000;
+    autoMsgTimer = setTimeout(runScheduledAutoMessage, delayMinutes * 60 * 1000);
+}
+async function runScheduledAutoMessage() {
+    autoMsgTimer = null;
+    if (!state.settings.autoMessageEnabled) return;
+    try {
         var onlinePartners = state.partners.filter(p => p.online);
-        if (onlinePartners.length === 0) {
-            // 没有在线伴侣，稍后重试
-            scheduleAutoMessage();
-            return;
-        }
-
+        if (onlinePartners.length === 0) { scheduleAutoMessage(); return; }
         var randomPartner = onlinePartners[Math.floor(Math.random() * onlinePartners.length)];
         const replyContent = await generateReplyContent(randomPartner.id);
-
         if (replyContent) {
             const replyMsg = { sender: randomPartner.id, timestamp: Date.now(), ...replyContent };
             const replyId = await saveMessageToDB(randomPartner.id, replyMsg);
             replyMsg.id = replyId;
-            // 自动消息属于“对方主动消息”，后台时允许 Bark 推送
             notifyBarkForPartnerMessage(randomPartner.id, replyMsg, 'partner_proactive');
-
-            if (randomPartner.id === state.currentPartnerId && chatLoader) {
+            if (randomPartner.id === state.currentPartnerId && chatLoader && chatLoader.partnerId === randomPartner.id) {
                 chatLoader.appendMessage(replyMsg);
-                if (!document.getElementById('chatScreen').classList.contains('hidden')) {
-                    clearUnread();
-                }
+                clearUnread();
             }
-            saveState();
             updateBadge();
+            saveState();
+            console.log('[MSG-PROACTIVE] saved', { partnerId: randomPartner.id, id: replyId });
         }
-
-        // 递归调度下一次（会再次经过开关检查）
-        scheduleAutoMessage();
-    }, delayMinutes * 60 * 1000);
+    } catch (e) { console.error('[MSG-PROACTIVE] failed:', e); }
+    scheduleAutoMessage();
 }
 
 function restartAutoMessage() {
@@ -6439,7 +6473,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function triggerContinueSpeaking() {
     const partner = getCurrentPartner();
     const replyPartnerId = partner ? partner.id : null;
-    window.__typingPartnerId = replyPartnerId;
+    showPartnerTyping(replyPartnerId);
     if (!partner) {
         showNote('没有找到伴侣', 'warning');
         return;
@@ -6502,10 +6536,7 @@ function triggerContinueSpeaking() {
             // ===== 最后一条消息发送完成后，隐藏「正在输入」 =====
             if (i === replyCount - 1) {
                 const tiWrapper = document.getElementById('typingIndicator');
-                if (tiWrapper && window.__typingPartnerId === replyPartnerId) {
-                    tiWrapper.style.display = 'none';
-                    window.__typingPartnerId = null;
-                }
+                hidePartnerTyping(replyPartnerId);
             }
         }, delay + i * 500);
     }
@@ -7404,6 +7435,10 @@ class KeepAliveManager {
         setInterval(fetchAndUpdateWeather, 30 * 60 * 1000);
         startAutoOnlineToggle();
         restartAutoMessage();
+        if (window.__autoMessageHeartbeat) clearInterval(window.__autoMessageHeartbeat);
+        window.__autoMessageHeartbeat = setInterval(function() {
+            if (state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !autoMsgTimer) runScheduledAutoMessage();
+        }, 1000);
 
         const todayStr = new Date().toDateString();
         if (state.stepsDate !== todayStr) {
