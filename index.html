@@ -3345,6 +3345,7 @@ function simulateReply() {
                     };
                     const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
                     replyMsg.id = replyId;
+                    notifyBarkForPartnerMessage(state.currentPartnerId, replyMsg);
                     if (chatLoader) {
                         chatLoader.appendMessage(replyMsg);
                         if (!document.getElementById('chatScreen').classList.contains('hidden')) {
@@ -3411,6 +3412,7 @@ function simulateReply() {
                 };
                 const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
                 replyMsg.id = replyId;
+                notifyBarkForPartnerMessage(state.currentPartnerId, replyMsg);
                 if (state.currentPartnerId === state.currentPartnerId && chatLoader) {
                     chatLoader.appendMessage(replyMsg);
                     if (!document.getElementById('chatScreen').classList.contains('hidden')) {
@@ -4100,12 +4102,12 @@ if (reminderMin && reminderMax) {
     
     const sendOnPartner = document.getElementById('barkSendOnPartnerToggle');
     if (sendOnPartner) {
-        state.settings.bark.sendOnPartnerReply = sendOnPartner.classList.contains('active');
+        state.settings.bark.sendOnPartnerReply = !!sendOnPartner.classList.contains('active');
     }
     
     const sendOnReminder = document.getElementById('barkSendOnReminderToggle');
     if (sendOnReminder) {
-        state.settings.bark.sendOnReminder = sendOnReminder.classList.contains('active');
+        state.settings.bark.sendOnReminder = !!sendOnReminder.classList.contains('active');
     }
 
     saveState();
@@ -4516,7 +4518,13 @@ function renderPokeSettingsContent() {
                 toggleEl.classList.toggle('active');
                 var key = toggleEl.getAttribute('data-key');
                 var enabled = toggleEl.classList.contains('active');
-                setSetting('settings.' + key, enabled);
+                if (key === 'sendOnPartnerReply' || key === 'sendOnReminder' || key === 'sendOnUserMessage') {
+                    if (!state.settings.bark) state.settings.bark = {};
+                    state.settings.bark[key] = enabled;
+                    saveState();
+                } else {
+                    setSetting('settings.' + key, enabled);
+                }
                 if (key === 'autoMessageEnabled') restartAutoMessage();
                 if (key === 'backgroundAudioEnabled' && window.keepAliveManager) { if (enabled) window.keepAliveManager.audio.start(); else window.keepAliveManager.audio.stop(); }
                 if (key === 'mediaSessionEnabled' && window.keepAliveManager) { if (enabled) window.keepAliveManager.mediaSession.setup(); else window.keepAliveManager.mediaSession.disable(); var mediaPanel=document.getElementById('mediaSessionSettings'); if(mediaPanel) mediaPanel.style.display=enabled?'block':'none'; }
@@ -6234,6 +6242,7 @@ function triggerContinueSpeaking() {
                 
                 const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
                 replyMsg.id = replyId;
+                notifyBarkForPartnerMessage(state.currentPartnerId, replyMsg);
                 
                 if (state.currentPartnerId === state.currentPartnerId && chatLoader) {
                     chatLoader.appendMessage(replyMsg);
@@ -6817,6 +6826,36 @@ async function checkAndSendAutoReply(partnerId) {
     // 4. 组合管理器（整合所有功能）- 修复版
 // ==========================================================
 
+// ==========================================================
+// Bark：统一的“对方消息已生成”推送出口
+// ==========================================================
+async function notifyBarkForPartnerMessage(partnerId, replyMsg) {
+    try {
+        if (!replyMsg || replyMsg.sender !== partnerId || !document.hidden) return;
+        const manager = window.keepAliveManager;
+        if (!manager || !manager.bark || !manager.bark.isConfigured()) {
+            console.log('[Bark] 对方消息：Bark 未配置，跳过');
+            return;
+        }
+        const settings = (typeof state !== 'undefined' && state.settings && state.settings.bark) ? state.settings.bark : {};
+        if (settings.sendOnPartnerReply === false) {
+            console.log('[Bark] 对方消息推送：已关闭，跳过');
+            return;
+        }
+        let partner = null;
+        if (typeof getPartner === 'function') partner = getPartner(partnerId);
+        if (!partner && typeof getCurrentPartner === 'function' && state.currentPartnerId === partnerId) partner = getCurrentPartner();
+        const name = partner && partner.name ? partner.name : '对方';
+        const text = replyMsg.text || (replyMsg.image ? '给你发了一张图片 ✨' : '给你发了一条新消息 ✨');
+        console.log('[Bark] 检测到后台对方消息，准备推送:', name);
+        const result = await manager.bark.notifyNewMessage(name, text);
+        if (result && result.success) console.log('[Bark] ✅ 对方消息推送成功');
+        else console.warn('[Bark] 对方消息推送未发送:', result);
+    } catch (e) {
+        console.warn('[Bark] 对方消息推送异常:', e);
+    }
+}
+
 class KeepAliveManager {
     constructor() {
         this.audio = new BackgroundAudioKeepAlive();
@@ -6927,35 +6966,9 @@ class KeepAliveManager {
         }
 
         setupMessageInterceptor() {
-            if (this._hasIntercepted) return;
+            // Bark 推送直接挂在“对方消息写入数据库”之后，避免包装 simulateReply 的初始化时机问题。
             this._hasIntercepted = true;
-
-            const _this = this;
-
-            // 拦截 simulateReply（对方回复时触发推送）
-const originalSimulateReply = window.simulateReply;
-if (originalSimulateReply) {
-    window.simulateReply = async function() {
-        const result = originalSimulateReply.apply(this, arguments);
-        
-        if (document.hidden && _this.bark.isConfigured()) {
-            try {
-                const partner = typeof getCurrentPartner === 'function' ? getCurrentPartner() : null;
-                const name = partner ? partner.name : '对方';
-                
-                const messages = chatLoader ? chatLoader.allMessages : [];
-                const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
-                const text = lastMsg && lastMsg.text ? lastMsg.text : '给你发了一条新消息 ✨';
-                
-                await _this.bark.notifyNewMessage(name, text);
-            } catch (e) {
-                console.warn('[Bark] 推送发送失败:', e);
-            }
-        }
-        
-        return result;
-    };
-       }
+            console.log('[Bark] 消息推送采用直接消息出口监听');
         }
 
         setBarkKey(key) {
