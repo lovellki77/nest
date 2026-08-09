@@ -1880,13 +1880,65 @@ html.dark-mode .inAppToast .toast-btn-secondary {
         }
     }
 
-    async function getMessageDBReady() {
-        const db = await openMessageDB();
+    async function migrateSeparatedMessagesToMainDB() {
+        const flagKey = 'mengyu_messages_restored_to_main_v2';
+        if (safeGet(flagKey) === 'true') return;
+        let separateDB = null;
         try {
-            await migrateLegacyMessagesToSeparateDB();
+            // 兼容之前 v5 已创建的独立消息库：把其中的消息安全合并回原有 MengyuDB。
+            separateDB = await openMessageDB();
+            const separated = await new Promise((resolve, reject) => {
+                if (!separateDB.objectStoreNames.contains(STORE_NAME)) return resolve([]);
+                const tx = separateDB.transaction(STORE_NAME, 'readonly');
+                const req = tx.objectStore(STORE_NAME).getAll();
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => reject(req.error || new Error('读取独立消息库失败'));
+            });
+            if (!separated.length) {
+                safeSet(flagKey, 'true');
+                return;
+            }
+            const mainDB = await openDB();
+            await new Promise((resolve, reject) => {
+                const tx = mainDB.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                let i = 0;
+                try {
+                    for (const msg of separated) {
+                        const copy = { ...msg };
+                        // 不沿用独立库的自增 id，避免覆盖主库已有消息；由主库重新分配 id。
+                        delete copy.id;
+                        store.add(copy);
+                        i++;
+                    }
+                } catch (e) {
+                    reject(e);
+                    return;
+                }
+                tx.oncomplete = resolve;
+                tx.onerror = () => reject(tx.error || new Error('恢复消息到主数据库失败'));
+                tx.onabort = () => reject(tx.error || new Error('恢复消息事务被中止'));
+            });
+            safeSet(flagKey, 'true');
+            console.log('[消息数据库] 已将旧独立消息库合并回主数据库，共', separated.length, '条');
         } catch (e) {
-            // 迁移失败时仍返回新库，避免发送消息被主数据库故障阻断；下一次操作继续重试迁移。
-            console.warn('[消息数据库] 旧数据迁移暂未完成:', e);
+            console.warn('[消息数据库] 独立消息库回迁暂未完成，将继续使用主数据库:', e);
+            throw e;
+        } finally {
+            if (separateDB) {
+                try { separateDB.close(); } catch (_) {}
+            }
+        }
+    }
+
+    async function getMessageDBReady() {
+        // 当前版本恢复使用已经验证过的 MengyuDB.messages 作为唯一消息存储。
+        // 如果设备曾运行过 v5，则首次访问时把 v5 独立库中的消息合并回来。
+        const db = await openDB();
+        try {
+            await migrateSeparatedMessagesToMainDB();
+        } catch (e) {
+            console.warn('[消息数据库] 独立库回迁失败:', e);
         }
         return db;
     }
@@ -2828,6 +2880,7 @@ if (placeholder) {
         VERSION: 'mengyu_version',
         STEPS: 'mengyu_steps',
         CUSTOM_STAMP: 'mengyu_custom_stamp',
+        STAMP_SETTINGS: 'mengyu_stamp_settings',
     };
 
     const DEFAULT_PARTNERS = [
@@ -2960,6 +3013,16 @@ if (placeholder) {
         }
         var settingsData = parseOrFallback(STORAGE_KEYS.SETTINGS, {});
 Object.assign(newState.settings, settingsData);
+        var stampSettingsData = parseOrFallback(STORAGE_KEYS.STAMP_SETTINGS, null);
+        if (stampSettingsData && typeof stampSettingsData === 'object') {
+            Object.assign(newState.stampSettings, stampSettingsData);
+        }
+        if (!newState.stampSettings || typeof newState.stampSettings !== 'object') {
+            newState.stampSettings = { mode: 'fixed', fixedStampId: null, todayDate: '', todayStampId: null };
+        }
+        if (newState.stampSettings.mode !== 'dailyRandom' && newState.stampSettings.mode !== 'fixed') {
+            newState.stampSettings.mode = 'fixed';
+        }
 // ===== 新增：确保 autoReply 存在 =====
 if (!newState.settings.autoReply) {
     newState.settings.autoReply = {
@@ -3019,6 +3082,7 @@ if (!newState.settings.autoReply) {
         safeSet(STORAGE_KEYS.CURRENT_PARTNER, state.currentPartnerId);
         safeSet(STORAGE_KEYS.VERSION, CURRENT_VERSION);
         safeSet(STORAGE_KEYS.STEPS, JSON.stringify({ steps: state.steps, stepsDate: state.stepsDate }));
+        safeSet(STORAGE_KEYS.STAMP_SETTINGS, JSON.stringify(state.stampSettings || { mode: 'fixed', fixedStampId: null, todayDate: '', todayStampId: null }));
         safeSet('mengyu_migrated_to_indexeddb', state._migrated ? 'true' : 'false');
         if (state.customStamp) {
             saveCustomStampToDB(state.customStamp).catch(err => console.warn('印章保存失败:', err));
