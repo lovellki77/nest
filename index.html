@@ -1414,9 +1414,7 @@ html.dark-mode .inAppToast .toast-btn-secondary {
         transform: translateY(-10px) scale(0.95);
     }
 }
-    
-.stamp-display-mode{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 16px}.stamp-mode-btn{border:1px solid var(--border-light);background:var(--bg-input);color:var(--text-secondary);border-radius:12px;padding:12px 10px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:.18s}.stamp-mode-btn.active{border-color:var(--accent);background:rgba(0,0,0,.025);color:var(--text-primary);box-shadow:0 2px 8px rgba(0,0,0,.05)}.stamp-mode-btn i{font-size:14px}.stamp-mode-btn span{font-size:13px;font-weight:600}.stamp-mode-btn small{font-size:10px;color:var(--text-muted);line-height:1.4}.stamp-gallery-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 6px}.stamp-count{font-size:11px;color:var(--text-muted);margin-left:8px}.stamp-gallery-hint{font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:10px}.stamp-batch-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px;border-radius:10px;background:var(--bg-input);margin-bottom:12px}.stamp-batch-bar span{font-size:11px;color:var(--text-secondary);margin-right:auto}.stamp-batch-bar button{border:1px solid var(--border-light);background:var(--bg-card);color:var(--text-secondary);border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer}.stamp-batch-bar button.danger{color:var(--danger)}.stamp-group-title{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:var(--text-primary);padding:8px 2px;border-bottom:1px solid var(--border-light);margin-bottom:8px}.stamp-group-title span:last-child{font-size:10px;color:var(--text-muted);font-weight:500}.stamp-gallery-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.stamp-gallery-item{min-width:0;border:1px solid var(--border-light);border-radius:12px;padding:7px;background:var(--bg-card);cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:pan-y;-webkit-tap-highlight-color:transparent}.stamp-gallery-item.dragging{opacity:.45;transform:scale(.98)}.stamp-thumb-wrap{position:relative;aspect-ratio:1/1;border-radius:9px;background:rgba(0,0,0,.025);overflow:hidden;display:flex;align-items:center;justify-content:center}.stamp-thumb{max-width:92%;max-height:92%;object-fit:contain}.stamp-check{position:absolute;left:6px;top:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:rgba(255,255,255,.88);backdrop-filter:blur(4px)}.stamp-check input{margin:0}.stamp-badge{position:absolute;right:6px;top:6px;padding:3px 6px;border-radius:999px;background:var(--accent);color:#fff;font-size:9px}.stamp-item-name{font-size:11px;margin:6px 2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stamp-item-actions{display:flex;gap:4px}.stamp-mini-btn{flex:1;min-width:0;border:1px solid var(--border-light);background:transparent;color:var(--text-secondary);border-radius:7px;padding:4px 2px;font-size:9px;cursor:pointer}.stamp-mini-btn.danger{color:var(--danger)}@media(max-width:420px){.stamp-gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.stamp-display-mode{grid-template-columns:1fr}.stamp-item-actions{flex-wrap:wrap}.stamp-mini-btn{flex-basis:31%}}
-</style>
+    </style>
 <!-- ========================================================== -->
     <!-- Favicon & PWA 配置（2026-07-21 更新） -->
     <!-- ========================================================== -->
@@ -1515,7 +1513,7 @@ html.dark-mode .inAppToast .toast-btn-secondary {
     </div>
 </div>
 <div class="context-menu hidden" id="contextMenu"></div>
-<input type="file" id="stamp-file-input" accept="image/png,image/webp,image/gif" multiple style="display:none;">
+<input type="file" id="stamp-file-input" accept="image/png,image/webp,image/gif" style="display:none;">
 
 <!-- 编辑个人资料弹窗 -->
 <div class="modal-overlay" id="editProfileModal">
@@ -1750,7 +1748,7 @@ html.dark-mode .inAppToast .toast-btn-secondary {
     });
 }
     // ===================== 版本管理 =====================
-    const CURRENT_VERSION = 1.3;
+    const CURRENT_VERSION = 1.2;
     const VERSION_INCREMENT = 0.1;
     const VERSION_UPGRADES = {
         1.2: function(data) {
@@ -1764,17 +1762,12 @@ html.dark-mode .inAppToast .toast-btn-secondary {
             if (typeof data.settings.mediaSessionPlayPause !== 'boolean') data.settings.mediaSessionPlayPause = true;
             if (typeof data.settings.mediaSessionNext !== 'boolean') data.settings.mediaSessionNext = false;
             if (typeof data.settings.mediaSessionPrevious !== 'boolean') data.settings.mediaSessionPrevious = false;
-        },
-        1.3: function(data) {
-            if (!data.stampGallery) data.stampGallery = [];
-            if (!data.stampSettings) data.stampSettings = { mode: 'fixed', fixedStampId: null, todayDate: '', todayStampId: null };
-            if (!data.stampSettings.mode) data.stampSettings.mode = 'fixed';
         }
     };
 
     // ===================== IndexedDB 管理 =====================
     const DB_NAME = 'MengyuDB';
-    const DB_VERSION = 4;
+    const DB_VERSION = 3;
     const STORE_NAME = 'messages';
     const EMOJI_STORE = 'emojis';
 
@@ -1794,11 +1787,6 @@ html.dark-mode .inAppToast .toast-btn-secondary {
                     const emojiStore = db.createObjectStore(EMOJI_STORE, { keyPath: 'id', autoIncrement: true });
                     emojiStore.createIndex('label', 'label', { unique: false });
                     emojiStore.createIndex('timestamp', 'timestamp', { unique: false });
-                }
-                if (!db.objectStoreNames.contains('stampGallery')) {
-                    const stampStore = db.createObjectStore('stampGallery', { keyPath: 'id', autoIncrement: true });
-                    stampStore.createIndex('status', 'status', { unique: false });
-                    stampStore.createIndex('order', 'order', { unique: false });
                 }
             };
             request.onsuccess = () => resolve(request.result);
@@ -2017,284 +2005,6 @@ html.dark-mode .inAppToast .toast-btn-secondary {
             return null;
         }
     }
-
-    // ---------- 自定义印章图库 ----------
-    async function getAllStampGalleryFromDB() {
-        const db = await openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction('stampGallery', 'readonly');
-            const store = tx.objectStore('stampGallery');
-            const req = store.getAll();
-            req.onsuccess = () => resolve((req.result || []).sort((a,b) => (a.order || 0) - (b.order || 0)));
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async function putStampGalleryItem(item) {
-        const db = await openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction('stampGallery', 'readwrite');
-            const req = tx.objectStore('stampGallery').put(item);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async function deleteStampGalleryItemFromDB(id) {
-        const db = await openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction('stampGallery', 'readwrite');
-            const req = tx.objectStore('stampGallery').delete(id);
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async function clearStampGalleryDB() {
-        const db = await openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction('stampGallery', 'readwrite');
-            const req = tx.objectStore('stampGallery').clear();
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async function saveStampGalleryOrder(items) {
-        const db = await openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction('stampGallery', 'readwrite');
-            const store = tx.objectStore('stampGallery');
-            items.forEach((item, index) => { item.order = index; store.put(item); });
-            tx.oncomplete = resolve;
-            tx.onerror = () => reject(tx.error);
-        });
-    }
-
-    function ensureStampSettings() {
-        if (!state.stampSettings) state.stampSettings = { mode: 'fixed', fixedStampId: null, todayDate: '', todayStampId: null };
-        if (!state.stampSettings.mode) state.stampSettings.mode = 'fixed';
-    }
-
-    function getActiveStamps() {
-        return (state.stampGallery || []).filter(x => x.status !== 'blocked').sort((a,b) => (a.order || 0) - (b.order || 0));
-    }
-
-    function setDisplayedStampFromGallery() {
-        ensureStampSettings();
-        const active = getActiveStamps();
-        if (!active.length) {
-            state.customStamp = null;
-            state.stampSettings.fixedStampId = null;
-            state.stampSettings.todayStampId = null;
-            state.stampSettings.todayDate = '';
-            return;
-        }
-        if (state.stampSettings.mode === 'fixed') {
-            let selected = active.find(x => String(x.id) === String(state.stampSettings.fixedStampId));
-            if (!selected) {
-                selected = active[0];
-                state.stampSettings.fixedStampId = selected.id;
-            }
-            state.customStamp = selected.imageData;
-            return;
-        }
-        const today = new Date().toDateString();
-        let selected = active.find(x => String(x.id) === String(state.stampSettings.todayStampId));
-        if (state.stampSettings.todayDate !== today || !selected) {
-            const previousId = state.stampSettings.todayStampId;
-            const candidates = active.length > 1 ? active.filter(x => String(x.id) !== String(previousId)) : active;
-            selected = candidates[Math.floor(Math.random() * candidates.length)];
-            state.stampSettings.todayDate = today;
-            state.stampSettings.todayStampId = selected.id;
-        }
-        state.customStamp = selected.imageData;
-    }
-
-    async function loadStampGallery() {
-        ensureStampSettings();
-        try {
-            let gallery = await getAllStampGalleryFromDB();
-            // 把旧版单印章自动迁移为图库中的第一枚“展示中”印章。
-            if (!gallery.length && state.customStamp) {
-                const legacy = { name: '旧版印章', imageData: state.customStamp, status: 'active', order: 0, createdAt: Date.now(), updatedAt: Date.now() };
-                const id = await putStampGalleryItem(legacy);
-                legacy.id = id;
-                gallery = [legacy];
-                state.stampSettings.mode = 'fixed';
-                state.stampSettings.fixedStampId = id;
-            }
-            state.stampGallery = gallery;
-            setDisplayedStampFromGallery();
-            saveState();
-        } catch (e) {
-            console.warn('加载印章图库失败:', e);
-            state.stampGallery = [];
-            state.customStamp = null;
-        }
-    }
-
-    function stampGalleryFileToDataURL(file, maxWidth) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = ev => {
-                const img = new Image();
-                img.onload = () => {
-                    let w = img.width, h = img.height;
-                    const max = maxWidth || 300;
-                    if (w > max) { h = h * max / w; w = max; }
-                    const canvas = document.createElement('canvas');
-                    canvas.width = Math.max(1, Math.round(w));
-                    canvas.height = Math.max(1, Math.round(h));
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    resolve(canvas.toDataURL('image/png'));
-                };
-                img.onerror = () => reject(new Error('图片解析失败'));
-                img.src = ev.target.result;
-            };
-            reader.onerror = () => reject(reader.error || new Error('读取图片失败'));
-            reader.readAsDataURL(file);
-        });
-    }
-
-    async function addStampFiles(files) {
-        const list = Array.from(files || []);
-        if (!list.length) return;
-        let added = 0;
-        let order = (state.stampGallery || []).reduce((m, x) => Math.max(m, Number(x.order) || 0), -1) + 1;
-        for (const file of list) {
-            if (!/^image\/(png|webp|gif|jpeg|jpg)$/i.test(file.type) && !/\.(png|webp|gif|jpe?g)$/i.test(file.name)) {
-                showNote('已跳过不支持的图片：' + file.name, 'warning');
-                continue;
-            }
-            if (file.size > 4 * 1024 * 1024) {
-                showNote('图片不能超过 4MB：' + file.name, 'warning');
-                continue;
-            }
-            try {
-                const data = await stampGalleryFileToDataURL(file, 300);
-                const item = { name: file.name.replace(/\.[^.]+$/, '') || '印章', imageData: data, status: 'active', order: order++, createdAt: Date.now(), updatedAt: Date.now() };
-                const id = await putStampGalleryItem(item);
-                item.id = id;
-                state.stampGallery.push(item);
-                added++;
-            } catch (e) {
-                console.error(e);
-                showNote('处理图片失败：' + file.name, 'error');
-            }
-        }
-        state.stampGallery.sort((a,b) => (a.order || 0) - (b.order || 0));
-        if (added) {
-            if (!getActiveStamps().length) ensureStampSettings();
-            if (!state.stampSettings.fixedStampId) state.stampSettings.fixedStampId = getActiveStamps()[0]?.id || null;
-            setDisplayedStampFromGallery();
-            saveState();
-            renderMain();
-            openSettingsSub('appearance');
-            showNote('已添加 ' + added + ' 个印章', 'success');
-        }
-    }
-
-    async function updateStampItem(id, patch) {
-        const item = (state.stampGallery || []).find(x => String(x.id) === String(id));
-        if (!item) return;
-        Object.assign(item, patch, { updatedAt: Date.now() });
-        await putStampGalleryItem(item);
-    }
-
-    async function applyStampGalleryChange() {
-        ensureStampSettings();
-        setDisplayedStampFromGallery();
-        saveState();
-        renderMain();
-        openSettingsSub('appearance');
-    }
-
-    window.setStampDisplayMode = async function(mode) {
-        ensureStampSettings();
-        state.stampSettings.mode = mode === 'dailyRandom' ? 'dailyRandom' : 'fixed';
-        if (state.stampSettings.mode === 'fixed' && !getActiveStamps().some(x => String(x.id) === String(state.stampSettings.fixedStampId))) {
-            state.stampSettings.fixedStampId = getActiveStamps()[0]?.id || null;
-        }
-        if (state.stampSettings.mode === 'dailyRandom') {
-            state.stampSettings.todayDate = '';
-            state.stampSettings.todayStampId = null;
-        }
-        await applyStampGalleryChange();
-    };
-
-    window.setFixedStamp = async function(id) {
-        ensureStampSettings();
-        const item = getActiveStamps().find(x => String(x.id) === String(id));
-        if (!item) { showNote('该印章目前处于屏蔽状态', 'warning'); return; }
-        state.stampSettings.fixedStampId = item.id;
-        state.stampSettings.mode = 'fixed';
-        await applyStampGalleryChange();
-        showNote('已设为固定展示', 'success');
-    };
-
-    window.toggleStampBlocked = async function(id) {
-        const item = (state.stampGallery || []).find(x => String(x.id) === String(id));
-        if (!item) return;
-        item.status = item.status === 'blocked' ? 'active' : 'blocked';
-        await putStampGalleryItem(item);
-        await applyStampGalleryChange();
-        showNote(item.status === 'blocked' ? '已移入屏蔽' : '已移回展示', 'success');
-    };
-
-    window.deleteStampItem = async function(id) {
-        const item = (state.stampGallery || []).find(x => String(x.id) === String(id));
-        if (!item) return;
-        if (!confirm('确定删除这个印章吗？删除后无法恢复。')) return;
-        await deleteStampGalleryItemFromDB(item.id);
-        state.stampGallery = state.stampGallery.filter(x => String(x.id) !== String(id));
-        if (String(state.stampSettings.fixedStampId) === String(id)) state.stampSettings.fixedStampId = null;
-        if (String(state.stampSettings.todayStampId) === String(id)) state.stampSettings.todayStampId = null;
-        await applyStampGalleryChange();
-        showNote('印章已删除', 'success');
-    };
-
-    window.batchStampAction = async function(action) {
-        const selected = Array.from(document.querySelectorAll('.stamp-select:checked')).map(el => String(el.value));
-        if (!selected.length) { showNote('请先选择印章', 'info'); return; }
-        if (action === 'delete' && !confirm('确定删除选中的 ' + selected.length + ' 个印章吗？删除后无法恢复。')) return;
-        for (const id of selected) {
-            const item = (state.stampGallery || []).find(x => String(x.id) === id);
-            if (!item) continue;
-            if (action === 'delete') {
-                await deleteStampGalleryItemFromDB(item.id);
-                if (String(state.stampSettings.fixedStampId) === id) state.stampSettings.fixedStampId = null;
-                if (String(state.stampSettings.todayStampId) === id) state.stampSettings.todayStampId = null;
-            } else if (action === 'block') {
-                item.status = 'blocked'; await putStampGalleryItem(item);
-            } else if (action === 'active') {
-                item.status = 'active'; await putStampGalleryItem(item);
-            }
-        }
-        if (action === 'delete') state.stampGallery = state.stampGallery.filter(x => selected.indexOf(String(x.id)) === -1);
-        await applyStampGalleryChange();
-        showNote(action === 'delete' ? '已删除选中印章' : action === 'block' ? '已移入屏蔽' : '已移回展示', 'success');
-    };
-
-    window.moveStampGallery = async function(fromIndex, toIndex) {
-        const items = (state.stampGallery || []).slice().sort((a,b) => (a.order || 0) - (b.order || 0));
-        if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length || fromIndex === toIndex) return;
-        const moved = items.splice(fromIndex, 1)[0];
-        items.splice(toIndex, 0, moved);
-        items.forEach((item, i) => item.order = i);
-        state.stampGallery = items;
-        await saveStampGalleryOrder(items);
-        setDisplayedStampFromGallery();
-        saveState();
-        renderMain();
-        openSettingsSub('appearance');
-    };
-
-    window.selectAllStamps = function(status) {
-        document.querySelectorAll('.stamp-select').forEach(el => { el.checked = true; });
-    };
 
     // ===================== 数据迁移 =====================
     async function migrateToIndexedDB() {
@@ -2739,8 +2449,6 @@ if (placeholder) {
         steps: 0,
         stepsDate: '',
         customStamp: null,
-        stampGallery: [],
-        stampSettings: { mode: 'fixed', fixedStampId: null, todayDate: '', todayStampId: null },
         _migrated: false
     };
 }
@@ -3345,7 +3053,6 @@ function simulateReply() {
                     };
                     const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
                     replyMsg.id = replyId;
-                    notifyBarkForPartnerMessage(state.currentPartnerId, replyMsg);
                     if (chatLoader) {
                         chatLoader.appendMessage(replyMsg);
                         if (!document.getElementById('chatScreen').classList.contains('hidden')) {
@@ -3412,7 +3119,6 @@ function simulateReply() {
                 };
                 const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
                 replyMsg.id = replyId;
-                notifyBarkForPartnerMessage(state.currentPartnerId, replyMsg);
                 if (state.currentPartnerId === state.currentPartnerId && chatLoader) {
                     chatLoader.appendMessage(replyMsg);
                     if (!document.getElementById('chatScreen').classList.contains('hidden')) {
@@ -3715,6 +3421,7 @@ checkAndSendAutoReply(state.currentPartnerId);
             { type: 'chat', icon: 'fa-comments', label: '私语设置' },
             { type: 'partner', icon: 'fa-user-group', label: '伴侣管理' },
             { type: 'interact', icon: 'fa-sliders-h', label: '交互构建' },
+            { type: 'background', icon: 'fa-headphones', label: '后台运行' },
             { type: 'data', icon: 'fa-database', label: '数据监控' }
         ];
         cards.forEach(function(c) {
@@ -3882,10 +3589,10 @@ window.clearAllPokes = function() {
         const s=state.settings||{}; const media=s.mediaSessionEnabled===true; const art=s.mediaSessionArtwork||'';
         return `<div class="card"><div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-headphones"></i> 后台运行</div><div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px;">使用网页原生音频播放能力提高后台媒体存活能力，不显示网页播放器。实际后台行为仍由系统和浏览器决定。</div>${renderToggle('后台音频保活','backgroundAudioEnabled',s.backgroundAudioEnabled!==false)}</div><div class="card" style="margin-top:12px;"><div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-mobile-screen-button"></i> 系统媒体信息</div><div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px;">可选。开启后，支持的系统可能在锁屏或媒体控制区域显示标题、作者和封面。</div>${renderToggle('启用 MediaSession','mediaSessionEnabled',media)}<div id="mediaSessionSettings" style="display:${media?'block':'none'};margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);"><label style="font-size:12px;color:var(--text-secondary);">标题</label><input id="mediaSessionTitleInput" type="text" maxlength="80" value="${escapeHTML(s.mediaSessionTitle||'梦语 · 后台运行')}" style="margin:4px 0 10px;"><label style="font-size:12px;color:var(--text-secondary);">作者</label><input id="mediaSessionArtistInput" type="text" maxlength="80" value="${escapeHTML(s.mediaSessionArtist||'梦语')}" style="margin:4px 0 10px;"><label style="font-size:12px;color:var(--text-secondary);">专辑</label><input id="mediaSessionAlbumInput" type="text" maxlength="80" value="${escapeHTML(s.mediaSessionAlbum||'Dream Talk')}" style="margin:4px 0 10px;"><label style="font-size:12px;color:var(--text-secondary);">封面 URL</label><input id="mediaSessionArtworkInput" type="text" value="${escapeHTML(art)}" placeholder="https://... 或 data:image/..." style="margin:4px 0 8px;"><input id="mediaSessionArtworkFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;"><button class="primary-btn" data-action="choose-media-artwork" style="width:100%;margin-bottom:10px;"><i class="fa-solid fa-image"></i> 选择本地封面</button>${art?`<div style="display:flex;justify-content:center;margin-bottom:10px;"><img src="${escapeHTML(art)}" style="width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid var(--border-light);"></div>`:''}${renderToggle('播放 / 暂停控制','mediaSessionPlayPause',s.mediaSessionPlayPause!==false)}${renderToggle('下一项控制','mediaSessionNext',s.mediaSessionNext===true)}${renderToggle('上一项控制','mediaSessionPrevious',s.mediaSessionPrevious===true)}<button class="primary-btn" data-action="save-media-session" style="width:100%;margin-top:12px;"><i class="fa-solid fa-save"></i> 保存媒体信息</button></div></div>`;
     }
-    function saveMediaSessionSettings(){state.settings.mediaSessionTitle=(document.getElementById('mediaSessionTitleInput')?.value||'').trim()||'梦语 · 后台运行';state.settings.mediaSessionArtist=(document.getElementById('mediaSessionArtistInput')?.value||'').trim()||'梦语';state.settings.mediaSessionAlbum=(document.getElementById('mediaSessionAlbumInput')?.value||'').trim()||'Dream Talk';state.settings.mediaSessionArtwork=(document.getElementById('mediaSessionArtworkInput')?.value||'').trim();saveState();if(window.keepAliveManager)window.keepAliveManager.mediaSession.refresh();showNote('系统媒体信息已保存','success');switchAppearanceTab('background');}
+    function saveMediaSessionSettings(){state.settings.mediaSessionTitle=(document.getElementById('mediaSessionTitleInput')?.value||'').trim()||'梦语 · 后台运行';state.settings.mediaSessionArtist=(document.getElementById('mediaSessionArtistInput')?.value||'').trim()||'梦语';state.settings.mediaSessionAlbum=(document.getElementById('mediaSessionAlbumInput')?.value||'').trim()||'Dream Talk';state.settings.mediaSessionArtwork=(document.getElementById('mediaSessionArtworkInput')?.value||'').trim();saveState();if(window.keepAliveManager)window.keepAliveManager.mediaSession.refresh();showNote('系统媒体信息已保存','success');openSettingsSub('background');}
 
     // ========== 外观美化 ==========
-    function renderAppearanceSettingsLegacy() {
+    function renderAppearanceSettings() {
     // ===== 获取 Bark 设置状态 =====
     const status = typeof getBarkStatus === 'function' ? getBarkStatus() : { isConfigured: false };
     const key = typeof getBarkKey === 'function' ? getBarkKey() : '';
@@ -4011,12 +3718,12 @@ window.clearAllPokes = function() {
     <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
         <span style="font-size:13px;">对方回复时推送</span>
         <div class="toggle ${sendOnPartner ? 'active' : ''}" 
-             id="barkSendOnPartnerToggle" data-key="sendOnPartnerReply"></div>
+             id="barkSendOnPartnerToggle" data-action="toggle" data-key="sendOnPartnerReply" role="switch" aria-checked="${sendOnPartner ? 'true' : 'false'}" tabindex="0" style="cursor:pointer;touch-action:manipulation;"></div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
         <span style="font-size:13px;">后台提醒推送</span>
         <div class="toggle ${sendOnReminder ? 'active' : ''}" 
-             id="barkSendOnReminderToggle" data-key="sendOnReminder"></div>
+             id="barkSendOnReminderToggle" data-action="toggle" data-key="sendOnReminder" role="switch" aria-checked="${sendOnReminder ? 'true' : 'false'}" tabindex="0" style="cursor:pointer;touch-action:manipulation;"></div>
     </div>
 </div>
 
@@ -4102,12 +3809,12 @@ if (reminderMin && reminderMax) {
     
     const sendOnPartner = document.getElementById('barkSendOnPartnerToggle');
     if (sendOnPartner) {
-        state.settings.bark.sendOnPartnerReply = !!sendOnPartner.classList.contains('active');
+        state.settings.bark.sendOnPartnerReply = sendOnPartner.classList.contains('active');
     }
     
     const sendOnReminder = document.getElementById('barkSendOnReminderToggle');
     if (sendOnReminder) {
-        state.settings.bark.sendOnReminder = !!sendOnReminder.classList.contains('active');
+        state.settings.bark.sendOnReminder = sendOnReminder.classList.contains('active');
     }
 
     saveState();
@@ -4235,86 +3942,6 @@ function renderPokeSettingsContent() {
     html += '<div class="wordcard-add-btn" data-action="add-poke-from-grid"><i class="fa-solid fa-plus"></i></div></div>';
     return html;
 }
-
-
-    // ========== 外观美化：内部标签页 ========== 
-    window.switchAppearanceTab = function(tab) {
-        var allowed = ['stamp', 'labels', 'bark', 'background'];
-        if (allowed.indexOf(tab) === -1) tab = 'stamp';
-        window._appearanceTab = tab;
-        openSettingsSub('appearance');
-    };
-
-    function renderStampGalleryCard() {
-        ensureStampSettings();
-        const gallery = (state.stampGallery || []).slice().sort((a,b) => (a.order || 0) - (b.order || 0));
-        const active = gallery.filter(x => x.status !== 'blocked');
-        const blocked = gallery.filter(x => x.status === 'blocked');
-        const mode = state.stampSettings.mode || 'fixed';
-        const renderGroup = (items, groupName, isBlocked) => {
-            if (!items.length) return '<div style="padding:26px 12px;text-align:center;color:var(--text-muted);font-size:12px;">' + (isBlocked ? '暂无屏蔽印章' : '图库为空，将使用系统预设印章') + '</div>';
-            let html = '<div class="stamp-gallery-grid">';
-            items.forEach((item) => {
-                const fixed = mode === 'fixed' && String(state.stampSettings.fixedStampId) === String(item.id);
-                const today = mode === 'dailyRandom' && String(state.stampSettings.todayStampId) === String(item.id);
-                html += '<div class="stamp-gallery-item" draggable="true" data-stamp-id="' + item.id + '" data-stamp-index="' + gallery.indexOf(item) + '">';
-                html += '<div class="stamp-thumb-wrap">';
-                html += '<img src="' + item.imageData + '" class="stamp-thumb" alt="">';
-                html += '<label class="stamp-check"><input type="checkbox" class="stamp-select" value="' + item.id + '"></label>';
-                html += (fixed ? '<span class="stamp-badge">固定</span>' : today ? '<span class="stamp-badge">今日</span>' : '');
-                html += '</div>';
-                html += '<div class="stamp-item-name" title="' + escapeHTML(item.name || '印章') + '">' + escapeHTML(item.name || '印章') + '</div>';
-                html += '<div class="stamp-item-actions">';
-                if (!isBlocked) html += '<button type="button" class="stamp-mini-btn" onclick="setFixedStamp(' + item.id + ')">设为固定</button>';
-                html += '<button type="button" class="stamp-mini-btn" onclick="toggleStampBlocked(' + item.id + ')">' + (isBlocked ? '移回展示' : '屏蔽') + '</button>';
-                html += '<button type="button" class="stamp-mini-btn danger" onclick="deleteStampItem(' + item.id + ')">删除</button>';
-                html += '</div></div>';
-            });
-            html += '</div>';
-            return html;
-        };
-
-        let html = '<div class="card">';
-        html += '<div class="settings-section-title" style="margin-bottom:10px;"><i class="fa-solid fa-stamp"></i> 自定义印章</div>';
-        html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6;">上方保持现有印章展示窗口不变。这里用于管理印章图库，并决定印章如何展示。</div>';
-        html += '<div class="stamp-display-mode">';
-        html += '<button type="button" class="stamp-mode-btn ' + (mode === 'fixed' ? 'active' : '') + '" onclick="setStampDisplayMode(\'fixed\')"><i class="fa-solid fa-thumbtack"></i><span>固定展示</span><small>只展示选中的印章</small></button>';
-        html += '<button type="button" class="stamp-mode-btn ' + (mode === 'dailyRandom' ? 'active' : '') + '" onclick="setStampDisplayMode(\'dailyRandom\')"><i class="fa-solid fa-shuffle"></i><span>每日随机轮换</span><small>每天随机抽取一枚展示</small></button>';
-        html += '</div>';
-        html += '<div class="stamp-gallery-toolbar"><div><strong>印章图库</strong><span class="stamp-count">展示中 ' + active.length + ' · 屏蔽 ' + blocked.length + '</span></div><button class="primary-btn" data-action="upload-stamp" style="padding:7px 13px;font-size:12px;"><i class="fa-solid fa-plus"></i> 上传印章</button></div>';
-        html += '<div class="stamp-gallery-hint">支持多选上传。拖动图片可调整图库顺序；屏蔽的印章不会参与固定/随机展示。</div>';
-        html += '<div class="stamp-batch-bar"><span>批量操作</span><button type="button" onclick="selectAllStamps()">全选</button><button type="button" onclick="batchStampAction(\'active\')">移回展示</button><button type="button" onclick="batchStampAction(\'block\')">移入屏蔽</button><button type="button" class="danger" onclick="batchStampAction(\'delete\')">删除</button></div>';
-        html += '<div class="stamp-group-title"><span>展示中</span><span>' + active.length + '</span></div>';
-        html += renderGroup(active, '展示中', false);
-        html += '<div class="stamp-group-title" style="margin-top:18px;"><span>屏蔽</span><span>' + blocked.length + '</span></div>';
-        html += renderGroup(blocked, '屏蔽', true);
-        html += '</div>';
-        return html;
-    }
-
-    window.switchAppearanceTab = function(tab) {
-        var allowed = ['stamp', 'labels', 'bark', 'background'];
-        if (allowed.indexOf(tab) === -1) tab = 'stamp';
-        window._appearanceTab = tab;
-        openSettingsSub('appearance');
-    };
-
-    function renderAppearanceSettings() {
-        var activeTab = window._appearanceTab || 'stamp';
-        var legacy = document.createElement('div');
-        legacy.innerHTML = renderAppearanceSettingsLegacy();
-        var cards = Array.prototype.slice.call(legacy.children);
-        var labelsCard = cards[1] ? cards[1].outerHTML : '';
-        var barkCard = cards[2] ? cards[2].outerHTML : '';
-        var backgroundCard = renderBackgroundSettings();
-        var stampCard = renderStampGalleryCard();
-        var tabs = [['stamp','fa-stamp','自定义印章'],['labels','fa-tags','交互标签'],['bark','fa-bell','Bark 推送'],['background','fa-headphones','后台运行']];
-        var html = '<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px;"><div class="appearance-settings-tabs" style="display:flex;gap:4px;overflow-x:auto;padding:6px;border-bottom:1px solid var(--border-light);-webkit-overflow-scrolling:touch;scrollbar-width:none;">';
-        tabs.forEach(function(t){var active=activeTab===t[0];html+='<button type="button" onclick="switchAppearanceTab(\''+t[0]+'\')" style="flex:0 0 auto;border:0;background:'+(active?'var(--bg-card)':'transparent')+';color:'+(active?'var(--text-primary)':'var(--text-secondary)')+';padding:9px 13px;border-radius:8px;font-size:12px;font-weight:'+(active?'600':'500')+';cursor:pointer;white-space:nowrap;box-shadow:'+(active?'0 1px 4px rgba(0,0,0,0.06)':'none')+';"><i class="fa-solid '+t[1]+'" style="margin-right:5px;"></i>'+t[2]+'</button>';});
-        html += '</div></div><div class="appearance-settings-panel" data-appearance-tab="'+activeTab+'">';
-        if(activeTab==='labels') html+=labelsCard; else if(activeTab==='bark') html+=barkCard; else if(activeTab==='background') html+=backgroundCard; else html+=stampCard;
-        html += '</div>'; return html;
-    }
 
     function renderInteractSettings() {
     if (typeof window._interactTab === 'undefined') {
@@ -4518,13 +4145,20 @@ function renderPokeSettingsContent() {
                 toggleEl.classList.toggle('active');
                 var key = toggleEl.getAttribute('data-key');
                 var enabled = toggleEl.classList.contains('active');
-                if (key === 'sendOnPartnerReply' || key === 'sendOnReminder' || key === 'sendOnUserMessage') {
+
+                // Bark 两个开关使用 state.settings.bark 作为唯一数据源，
+                // 不再写入 state.settings.sendOnPartnerReply / sendOnReminder。
+                if (key === 'sendOnPartnerReply' || key === 'sendOnReminder') {
+                    if (!state.settings) state.settings = {};
                     if (!state.settings.bark) state.settings.bark = {};
                     state.settings.bark[key] = enabled;
+                    toggleEl.setAttribute('aria-checked', enabled ? 'true' : 'false');
                     saveState();
-                } else {
-                    setSetting('settings.' + key, enabled);
+                    console.log('[Bark] 开关已更新:', key, enabled);
+                    break;
                 }
+
+                setSetting('settings.' + key, enabled);
                 if (key === 'autoMessageEnabled') restartAutoMessage();
                 if (key === 'backgroundAudioEnabled' && window.keepAliveManager) { if (enabled) window.keepAliveManager.audio.start(); else window.keepAliveManager.audio.stop(); }
                 if (key === 'mediaSessionEnabled' && window.keepAliveManager) { if (enabled) window.keepAliveManager.mediaSession.setup(); else window.keepAliveManager.mediaSession.disable(); var mediaPanel=document.getElementById('mediaSessionSettings'); if(mediaPanel) mediaPanel.style.display=enabled?'block':'none'; }
@@ -4551,7 +4185,7 @@ function renderPokeSettingsContent() {
                 document.getElementById('stamp-file-input').click();
                 break;
             case 'clear-stamp':
-                await clearCustomStamp();
+                clearCustomStamp();
                 break;
             case 'add-wordcard-from-input':
                 var singleInput = document.getElementById('wordcardSingleInput');
@@ -4597,202 +4231,63 @@ case 'clear-pokes': clearAllPokes(); break;
         }
     });
 
-    // 印章图库拖动排序（桌面端 HTML5 drag + iPad/触屏 pointer 兜底）
-    document.addEventListener('dragstart', function(e) {
-        var item = e.target.closest && e.target.closest('.stamp-gallery-item');
-        if (!item) return;
-        window._stampDragId = item.getAttribute('data-stamp-id');
-        item.classList.add('dragging');
-        if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', window._stampDragId); }
-    });
-    document.addEventListener('dragend', function(e) {
-        var item = e.target.closest && e.target.closest('.stamp-gallery-item');
-        if (item) item.classList.remove('dragging');
-        window._stampDragId = null;
-    });
-    document.addEventListener('dragover', function(e) {
-        var item = e.target.closest && e.target.closest('.stamp-gallery-item');
-        if (!item || !window._stampDragId) return;
+    // Bark 开关键盘/辅助功能支持：Enter / Space 与点击行为一致。
+    document.getElementById('settingsScreen').addEventListener('keydown', function(e) {
+        const el = e.target && e.target.closest ? e.target.closest('#barkSendOnPartnerToggle, #barkSendOnReminderToggle') : null;
+        if (!el || (e.key !== 'Enter' && e.key !== ' ')) return;
         e.preventDefault();
-        var grid = item.parentElement;
-        var all = Array.from(grid.querySelectorAll('.stamp-gallery-item'));
-        var drag = grid.querySelector('[data-stamp-id="'+CSS.escape(String(window._stampDragId))+'"]');
-        if (!drag || drag === item) return;
-        var rect = item.getBoundingClientRect();
-        var before = (e.clientY - rect.top) < rect.height / 2;
-        grid.insertBefore(drag, before ? item : item.nextSibling);
-    });
-    // 触屏长按拖动排序：使用 Pointer Events，兼容 iPhone / iPad Safari。
-    // 普通点击不进入拖动；按住约 350ms 后才进入拖动状态，并在移动前允许页面正常滚动。
-    (function setupStampPointerDrag(){
-        var pressTimer = null;
-        var dragging = null;
-        var activeGrid = null;
-        var activePointerId = null;
-        var startX = 0;
-        var startY = 0;
-        var longPressReady = false;
-        var movedBeforeLongPress = false;
-
-        function cancelPress(){
-            if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-            longPressReady = false;
-        }
-
-        function resetItem(item){
-            if (!item) return;
-            item.classList.remove('dragging');
-            item.style.touchAction = '';
-            item.style.position = '';
-            item.style.zIndex = '';
-            item.style.pointerEvents = '';
-        }
-
-        function clearState(){
-            cancelPress();
-            resetItem(dragging);
-            dragging = null;
-            activeGrid = null;
-            activePointerId = null;
-            movedBeforeLongPress = false;
-        }
-
-        function getStampItem(target){
-            return target && target.closest ? target.closest('.stamp-gallery-item') : null;
-        }
-
-        function reorderAtPoint(clientX, clientY){
-            if (!dragging || !activeGrid) return;
-            var el = document.elementFromPoint(clientX, clientY);
-            var over = getStampItem(el);
-            if (!over || over === dragging || over.parentElement !== activeGrid) return;
-            var rect = over.getBoundingClientRect();
-            // 用中心点判断插入位置，避免拖到图片边缘时频繁跳动。
-            var before = (clientY - rect.top) < (rect.height / 2);
-            activeGrid.insertBefore(dragging, before ? over : over.nextSibling);
-        }
-
-        document.addEventListener('pointerdown', function(e){
-            if (e.pointerType === 'mouse') return;
-            var item = getStampItem(e.target);
-            if (!item) return;
-            // 点击复选框、按钮等管理控件时绝不进入拖动。
-            if (e.target.closest && e.target.closest('button,input,label,select,textarea,a')) return;
-            if (dragging) return;
-
-            startX = e.clientX;
-            startY = e.clientY;
-            activePointerId = e.pointerId;
-            movedBeforeLongPress = false;
-            cancelPress();
-
-            pressTimer = setTimeout(function(){
-                if (movedBeforeLongPress || !item.isConnected) return;
-                dragging = item;
-                activeGrid = item.parentElement;
-                longPressReady = true;
-                item.classList.add('dragging');
-                item.style.touchAction = 'none';
-                item.style.zIndex = '20';
-                try { item.setPointerCapture(activePointerId); } catch (_) {}
-            }, 350);
-        }, {passive:true});
-
-        document.addEventListener('pointermove', function(e){
-            if (activePointerId !== null && e.pointerId !== activePointerId) return;
-
-            if (!dragging) {
-                if (!pressTimer) return;
-                var dx = e.clientX - startX;
-                var dy = e.clientY - startY;
-                if ((dx * dx + dy * dy) > 64) {
-                    // 手指在长按完成前明显移动，视为滚动，不启动拖动。
-                    movedBeforeLongPress = true;
-                    cancelPress();
-                }
-                return;
-            }
-
-            e.preventDefault();
-            reorderAtPoint(e.clientX, e.clientY);
-        }, {passive:false});
-
-        async function finishPointer(e, cancelled){
-            if (activePointerId !== null && e && e.pointerId !== activePointerId) return;
-            cancelPress();
-            if (!dragging) {
-                clearState();
-                return;
-            }
-
-            var item = dragging;
-            var grid = activeGrid;
-            var ids = grid ? Array.from(grid.querySelectorAll('.stamp-gallery-item')).map(function(el){
-                return String(el.getAttribute('data-stamp-id'));
-            }) : [];
-
-            if (!cancelled && ids.length) {
-                var all = (state.stampGallery || []).slice();
-                var ordered = [];
-                ids.forEach(function(id){
-                    var x = all.find(function(i){ return String(i.id) === id; });
-                    if (x) ordered.push(x);
-                });
-                var others = all.filter(function(x){ return ids.indexOf(String(x.id)) === -1; });
-                ordered.forEach(function(x, i){ x.order = i; });
-                others.forEach(function(x, i){ x.order = ordered.length + i; });
-                state.stampGallery = ordered.concat(others);
-                await saveStampGalleryOrder(state.stampGallery);
-                setDisplayedStampFromGallery();
-                saveState();
-            }
-
-            resetItem(item);
-            if (e) {
-                try { item.releasePointerCapture(e.pointerId); } catch (_) {}
-            }
-            dragging = null;
-            activeGrid = null;
-            activePointerId = null;
-            longPressReady = false;
-            movedBeforeLongPress = false;
-
-            if (!cancelled) {
-                renderMain();
-                openSettingsSub('appearance');
-            }
-        }
-
-        document.addEventListener('pointerup', function(e){ finishPointer(e, false); });
-        document.addEventListener('pointercancel', function(e){ finishPointer(e, true); });
-    })();
-
-    document.addEventListener('drop', async function(e) {
-        var grid = e.target.closest && e.target.closest('.stamp-gallery-grid');
-        if (!grid || !window._stampDragId) return;
-        e.preventDefault();
-        var ids = Array.from(grid.querySelectorAll('.stamp-gallery-item')).map(el => String(el.getAttribute('data-stamp-id')));
-        var all = (state.stampGallery || []).slice();
-        var selected = []; ids.forEach(id => { var x=all.find(i=>String(i.id)===id); if(x) selected.push(x); });
-        var others = all.filter(x => ids.indexOf(String(x.id)) === -1);
-        selected.forEach((x,i)=>x.order=i);
-        others.forEach((x,i)=>x.order=selected.length+i);
-        state.stampGallery = selected.concat(others);
-        await saveStampGalleryOrder(state.stampGallery);
-        setDisplayedStampFromGallery();
-        saveState();
-        renderMain();
-        openSettingsSub('appearance');
-        window._stampDragId = null;
+        el.click();
     });
 
     document.getElementById('settingsScreen').addEventListener('input', function(e) {
         if (e.target.matches('input[type="range"]')) { updateRangeSetting(e.target); }
     });
-    document.addEventListener('change', async function(e) {
+    document.addEventListener('change', function(e) {
         if (e.target.id === 'stamp-file-input') {
-            var files = e.target.files;
-            if (files && files.length) await addStampFiles(files);
+            var file = e.target.files[0];
+            if (!file) return;
+            if (file.size > 2 * 1024 * 1024) {
+                showNote('图片大小不能超过 2MB', 'warning');
+                e.target.value = '';
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+                var img = new Image();
+                img.onload = function() {
+                    var maxWidth = 300;
+                    var width = img.width;
+                    var height = img.height;
+                    if (width > maxWidth) {
+                        height = height * (maxWidth / width);
+                        width = maxWidth;
+                    }
+                    var canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    var ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, width, height);
+                    var compressedBase64 = canvas.toDataURL('image/png');
+                    state.customStamp = compressedBase64;
+                    saveState();
+                    renderMain();
+                    var subPage = document.getElementById('settingsSubPage');
+                    if (subPage && subPage.classList.contains('active')) {
+                        var currentType = subPage.getAttribute('data-type') || 'appearance';
+                        openSettingsSub(currentType);
+                    }
+                    showNote('自定义印章已更新', 'success');
+                };
+                img.onerror = function() {
+                    showNote('图片解析失败，请尝试其他图片', 'error');
+                };
+                img.src = ev.target.result;
+            };
+            reader.onerror = function() {
+                showNote('读取文件失败，请重试', 'error');
+            };
+            reader.readAsDataURL(file);
             e.target.value = '';
             return;
         }
@@ -5725,18 +5220,14 @@ function hideProgressNote() {
         openSettingsSub('status');
     };
 
-    async function clearCustomStamp() {
-        state.stampGallery = [];
-        ensureStampSettings();
-        state.stampSettings.fixedStampId = null;
-        state.stampSettings.todayStampId = null;
-        state.stampSettings.todayDate = '';
+    function clearCustomStamp() {
+        if (!state.customStamp) { showNote('尚未设置自定义印章', 'info'); return; }
+        if (!confirm('确定清除自定义印章吗？')) return;
         state.customStamp = null;
-        await clearStampGalleryDB();
         saveState();
         renderMain();
         openSettingsSub('appearance');
-        showNote('已清除全部自定义印章，恢复系统预设印章', 'success');
+        showNote('自定义印章已清除', 'success');
     }
 
     // ===================== 步数功能 =====================
@@ -6242,7 +5733,6 @@ function triggerContinueSpeaking() {
                 
                 const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
                 replyMsg.id = replyId;
-                notifyBarkForPartnerMessage(state.currentPartnerId, replyMsg);
                 
                 if (state.currentPartnerId === state.currentPartnerId && chatLoader) {
                     chatLoader.appendMessage(replyMsg);
@@ -6826,36 +6316,6 @@ async function checkAndSendAutoReply(partnerId) {
     // 4. 组合管理器（整合所有功能）- 修复版
 // ==========================================================
 
-// ==========================================================
-// Bark：统一的“对方消息已生成”推送出口
-// ==========================================================
-async function notifyBarkForPartnerMessage(partnerId, replyMsg) {
-    try {
-        if (!replyMsg || replyMsg.sender !== partnerId || !document.hidden) return;
-        const manager = window.keepAliveManager;
-        if (!manager || !manager.bark || !manager.bark.isConfigured()) {
-            console.log('[Bark] 对方消息：Bark 未配置，跳过');
-            return;
-        }
-        const settings = (typeof state !== 'undefined' && state.settings && state.settings.bark) ? state.settings.bark : {};
-        if (settings.sendOnPartnerReply === false) {
-            console.log('[Bark] 对方消息推送：已关闭，跳过');
-            return;
-        }
-        let partner = null;
-        if (typeof getPartner === 'function') partner = getPartner(partnerId);
-        if (!partner && typeof getCurrentPartner === 'function' && state.currentPartnerId === partnerId) partner = getCurrentPartner();
-        const name = partner && partner.name ? partner.name : '对方';
-        const text = replyMsg.text || (replyMsg.image ? '给你发了一张图片 ✨' : '给你发了一条新消息 ✨');
-        console.log('[Bark] 检测到后台对方消息，准备推送:', name);
-        const result = await manager.bark.notifyNewMessage(name, text);
-        if (result && result.success) console.log('[Bark] ✅ 对方消息推送成功');
-        else console.warn('[Bark] 对方消息推送未发送:', result);
-    } catch (e) {
-        console.warn('[Bark] 对方消息推送异常:', e);
-    }
-}
-
 class KeepAliveManager {
     constructor() {
         this.audio = new BackgroundAudioKeepAlive();
@@ -6966,9 +6426,35 @@ class KeepAliveManager {
         }
 
         setupMessageInterceptor() {
-            // Bark 推送直接挂在“对方消息写入数据库”之后，避免包装 simulateReply 的初始化时机问题。
+            if (this._hasIntercepted) return;
             this._hasIntercepted = true;
-            console.log('[Bark] 消息推送采用直接消息出口监听');
+
+            const _this = this;
+
+            // 拦截 simulateReply（对方回复时触发推送）
+const originalSimulateReply = window.simulateReply;
+if (originalSimulateReply) {
+    window.simulateReply = async function() {
+        const result = originalSimulateReply.apply(this, arguments);
+        
+        if (document.hidden && _this.bark.isConfigured()) {
+            try {
+                const partner = typeof getCurrentPartner === 'function' ? getCurrentPartner() : null;
+                const name = partner ? partner.name : '对方';
+                
+                const messages = chatLoader ? chatLoader.allMessages : [];
+                const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+                const text = lastMsg && lastMsg.text ? lastMsg.text : '给你发了一条新消息 ✨';
+                
+                await _this.bark.notifyNewMessage(name, text);
+            } catch (e) {
+                console.warn('[Bark] 推送发送失败:', e);
+            }
+        }
+        
+        return result;
+    };
+       }
         }
 
         setBarkKey(key) {
@@ -7072,7 +6558,7 @@ class KeepAliveManager {
         if (e.target && e.target.id === 'mediaSessionArtworkFile') {
             const file=e.target.files&&e.target.files[0]; if(!file)return;
             if(file.size>2*1024*1024){showNote('封面图片不能超过 2MB','warning');e.target.value='';return;}
-            const reader=new FileReader(); reader.onload=function(ev){state.settings.mediaSessionArtwork=ev.target.result;saveState();switchAppearanceTab('background');showNote('媒体封面已更新','success');}; reader.onerror=function(){showNote('封面读取失败','error');}; reader.readAsDataURL(file); e.target.value='';
+            const reader=new FileReader(); reader.onload=function(ev){state.settings.mediaSessionArtwork=ev.target.result;saveState();openSettingsSub('background');showNote('媒体封面已更新','success');}; reader.onerror=function(){showNote('封面读取失败','error');}; reader.readAsDataURL(file); e.target.value='';
         }
     });
 
@@ -7082,11 +6568,13 @@ class KeepAliveManager {
         await checkAndMigrate();
         try {
             const stamp = await loadCustomStampFromDB();
-            if (stamp && !state.customStamp) state.customStamp = stamp;
-            await loadStampGallery();
+            if (stamp) {
+                state.customStamp = stamp;
+            } else {
+                state.customStamp = null;
+            }
         } catch (e) {
-            console.warn('加载印章图库失败:', e);
-            state.stampGallery = [];
+            console.warn('加载印章失败:', e);
             state.customStamp = null;
         }
 
