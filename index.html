@@ -1748,9 +1748,22 @@ html.dark-mode .inAppToast .toast-btn-secondary {
     });
 }
     // ===================== 版本管理 =====================
-    const CURRENT_VERSION = 1.1;
+    const CURRENT_VERSION = 1.2;
     const VERSION_INCREMENT = 0.1;
-    const VERSION_UPGRADES = {};
+    const VERSION_UPGRADES = {
+        1.2: function(data) {
+            if (!data.settings) data.settings = {};
+            if (typeof data.settings.backgroundAudioEnabled !== 'boolean') data.settings.backgroundAudioEnabled = true;
+            if (typeof data.settings.mediaSessionEnabled !== 'boolean') data.settings.mediaSessionEnabled = false;
+            if (typeof data.settings.mediaSessionTitle !== 'string') data.settings.mediaSessionTitle = '梦语 · 后台运行';
+            if (typeof data.settings.mediaSessionArtist !== 'string') data.settings.mediaSessionArtist = '梦语';
+            if (typeof data.settings.mediaSessionAlbum !== 'string') data.settings.mediaSessionAlbum = 'Dream Talk';
+            if (typeof data.settings.mediaSessionArtwork !== 'string') data.settings.mediaSessionArtwork = '';
+            if (typeof data.settings.mediaSessionPlayPause !== 'boolean') data.settings.mediaSessionPlayPause = true;
+            if (typeof data.settings.mediaSessionNext !== 'boolean') data.settings.mediaSessionNext = false;
+            if (typeof data.settings.mediaSessionPrevious !== 'boolean') data.settings.mediaSessionPrevious = false;
+        }
+    };
 
     // ===================== IndexedDB 管理 =====================
     const DB_NAME = 'MengyuDB';
@@ -2413,6 +2426,15 @@ if (placeholder) {
             statusTabName: '伴侣状态',
             pureMode: false,
             pokeTabName: '拍一拍',
+            backgroundAudioEnabled: true,
+            mediaSessionEnabled: false,
+            mediaSessionTitle: '梦语 · 后台运行',
+            mediaSessionArtist: '梦语',
+            mediaSessionAlbum: 'Dream Talk',
+            mediaSessionArtwork: '',
+            mediaSessionPlayPause: true,
+            mediaSessionNext: false,
+            mediaSessionPrevious: false,
             autoReply: {
                 enabled: false,
                 texts: ['好的，我知道了', '有事在忙，晚点回复你', '嗯嗯知道了', '好的稍等', '马上回来'],
@@ -3399,6 +3421,7 @@ checkAndSendAutoReply(state.currentPartnerId);
             { type: 'chat', icon: 'fa-comments', label: '私语设置' },
             { type: 'partner', icon: 'fa-user-group', label: '伴侣管理' },
             { type: 'interact', icon: 'fa-sliders-h', label: '交互构建' },
+            { type: 'background', icon: 'fa-headphones', label: '后台运行' },
             { type: 'data', icon: 'fa-database', label: '数据监控' }
         ];
         cards.forEach(function(c) {
@@ -3425,6 +3448,7 @@ checkAndSendAutoReply(state.currentPartnerId);
         else if (type === 'chat') html += renderChatSettings();
         else if (type === 'partner') html += renderPartnerSettings();
         else if (type === 'interact') html += renderInteractSettings();
+        else if (type === 'background') html += renderBackgroundSettings();
         else if (type === 'data') html += renderDataSettings();
         sub.innerHTML = html;
         sub.classList.add('active');
@@ -3560,6 +3584,12 @@ window.clearAllPokes = function() {
     function renderRangeSliderRow(label, key, min, max, value, unitFormatter) {
         return `<div class="slider-item"><span>${label}</span><button class="stepper-btn" data-action="step" data-key="${key}" data-delta="-1">−</button><input type="range" class="range-slider" min="${min}" max="${max}" value="${value}" step="1" data-action="range" data-key="${key}"><button class="stepper-btn" data-action="step" data-key="${key}" data-delta="1">+</button><span id="${key}Label">${unitFormatter(value)}</span></div>`;
     }
+
+    function renderBackgroundSettings() {
+        const s=state.settings||{}; const media=s.mediaSessionEnabled===true; const art=s.mediaSessionArtwork||'';
+        return `<div class="card"><div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-headphones"></i> 后台运行</div><div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px;">使用网页原生音频播放能力提高后台媒体存活能力，不显示网页播放器。实际后台行为仍由系统和浏览器决定。</div>${renderToggle('后台音频保活','backgroundAudioEnabled',s.backgroundAudioEnabled!==false)}</div><div class="card" style="margin-top:12px;"><div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-mobile-screen-button"></i> 系统媒体信息</div><div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px;">可选。开启后，支持的系统可能在锁屏或媒体控制区域显示标题、作者和封面。</div>${renderToggle('启用 MediaSession','mediaSessionEnabled',media)}<div id="mediaSessionSettings" style="display:${media?'block':'none'};margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);"><label style="font-size:12px;color:var(--text-secondary);">标题</label><input id="mediaSessionTitleInput" type="text" maxlength="80" value="${escapeHTML(s.mediaSessionTitle||'梦语 · 后台运行')}" style="margin:4px 0 10px;"><label style="font-size:12px;color:var(--text-secondary);">作者</label><input id="mediaSessionArtistInput" type="text" maxlength="80" value="${escapeHTML(s.mediaSessionArtist||'梦语')}" style="margin:4px 0 10px;"><label style="font-size:12px;color:var(--text-secondary);">专辑</label><input id="mediaSessionAlbumInput" type="text" maxlength="80" value="${escapeHTML(s.mediaSessionAlbum||'Dream Talk')}" style="margin:4px 0 10px;"><label style="font-size:12px;color:var(--text-secondary);">封面 URL</label><input id="mediaSessionArtworkInput" type="text" value="${escapeHTML(art)}" placeholder="https://... 或 data:image/..." style="margin:4px 0 8px;"><input id="mediaSessionArtworkFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;"><button class="primary-btn" data-action="choose-media-artwork" style="width:100%;margin-bottom:10px;"><i class="fa-solid fa-image"></i> 选择本地封面</button>${art?`<div style="display:flex;justify-content:center;margin-bottom:10px;"><img src="${escapeHTML(art)}" style="width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid var(--border-light);"></div>`:''}${renderToggle('播放 / 暂停控制','mediaSessionPlayPause',s.mediaSessionPlayPause!==false)}${renderToggle('下一项控制','mediaSessionNext',s.mediaSessionNext===true)}${renderToggle('上一项控制','mediaSessionPrevious',s.mediaSessionPrevious===true)}<button class="primary-btn" data-action="save-media-session" style="width:100%;margin-top:12px;"><i class="fa-solid fa-save"></i> 保存媒体信息</button></div></div>`;
+    }
+    function saveMediaSessionSettings(){state.settings.mediaSessionTitle=(document.getElementById('mediaSessionTitleInput')?.value||'').trim()||'梦语 · 后台运行';state.settings.mediaSessionArtist=(document.getElementById('mediaSessionArtistInput')?.value||'').trim()||'梦语';state.settings.mediaSessionAlbum=(document.getElementById('mediaSessionAlbumInput')?.value||'').trim()||'Dream Talk';state.settings.mediaSessionArtwork=(document.getElementById('mediaSessionArtworkInput')?.value||'').trim();saveState();if(window.keepAliveManager)window.keepAliveManager.mediaSession.refresh();showNote('系统媒体信息已保存','success');openSettingsSub('background');}
 
     // ========== 外观美化 ==========
     function renderAppearanceSettings() {
@@ -4114,9 +4144,14 @@ function renderPokeSettingsContent() {
                 var toggleEl = target.closest('.toggle') || target;
                 toggleEl.classList.toggle('active');
                 var key = toggleEl.getAttribute('data-key');
-                setSetting('settings.' + key, toggleEl.classList.contains('active'));
+                var enabled = toggleEl.classList.contains('active');
+                setSetting('settings.' + key, enabled);
                 if (key === 'autoMessageEnabled') restartAutoMessage();
+                if (key === 'backgroundAudioEnabled' && window.keepAliveManager) { if (enabled) window.keepAliveManager.audio.start(); else window.keepAliveManager.audio.stop(); }
+                if (key === 'mediaSessionEnabled' && window.keepAliveManager) { if (enabled) window.keepAliveManager.mediaSession.setup(); else window.keepAliveManager.mediaSession.disable(); var mediaPanel=document.getElementById('mediaSessionSettings'); if(mediaPanel) mediaPanel.style.display=enabled?'block':'none'; }
                 break;
+            case 'choose-media-artwork': document.getElementById('mediaSessionArtworkFile')?.click(); break;
+            case 'save-media-session': saveMediaSessionSettings(); break;
             case 'range': updateRangeSetting(target); break;
             case 'step': stepRange(target); break;
             case 'edit-partner': openPartnerProfileFromMain(target.getAttribute('data-partner-id')); break;
@@ -6217,228 +6252,150 @@ async function checkAndSendAutoReply(partnerId) {
     }
 
     // ==========================================================
-    // 3. Web Audio 音频保活
+    // 3. HTML Audio 后台音频保活
     // ==========================================================
-
-    class AudioKeepAlive {
-        constructor() {
-            this.ctx = null;
-            this.isPlaying = false;
-            this.source = null;
-            this.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-            this.isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-            this.retryCount = 0;
-            this.maxRetries = 10;
-            this.isInitialized = false;
-            this._timer = null;
-            this._resumeHandler = null;
+    class BackgroundAudioKeepAlive {
+        constructor() { this.audio=null; this.isPlaying=false; this.isInitialized=false; this.userGestureBound=false; this.visibilityBound=false; this.retryTimer=null; this.audioSrc=new URL('keepalive.mp3', document.baseURI).href; }
+        getSettings() { return (typeof state !== 'undefined' && state && state.settings) ? state.settings : {}; }
+        createAudio() {
+            if (this.audio) return this.audio;
+            const audio=document.createElement('audio'); audio.id='backgroundKeepAliveAudio'; audio.preload='auto'; audio.loop=true; audio.playsInline=true; audio.setAttribute('playsinline',''); audio.setAttribute('webkit-playsinline',''); audio.volume=0.001; audio.src=this.audioSrc; audio.style.display='none'; document.body.appendChild(audio); this.audio=audio;
+            audio.addEventListener('play',()=>{this.isPlaying=true;if('mediaSession' in navigator&&window.keepAliveManager?.mediaSession?.isEnabled){try{navigator.mediaSession.playbackState='playing';}catch(e){}}console.log('[BackgroundAudio] ▶ 后台媒体播放已启动');});
+            audio.addEventListener('pause',()=>{this.isPlaying=false;if('mediaSession' in navigator&&window.keepAliveManager?.mediaSession?.isEnabled){try{navigator.mediaSession.playbackState='paused';}catch(e){}}if(this.getSettings().backgroundAudioEnabled!==false&&document.hidden)this.scheduleResume(500);});
+            audio.addEventListener('error',()=>console.warn('[BackgroundAudio] 音频加载失败，请确认 /nest/keepalive.mp3 存在'));
+            return audio;
         }
-
-        createSilentBuffer() {
-            const sampleRate = 44100;
-            const bufferSize = Math.floor(sampleRate * 0.1);
-            const buffer = this.ctx.createBuffer(1, bufferSize, sampleRate);
-            const data = buffer.getChannelData(0);
-            for (let i = 0; i < data.length; i++) {
-                data[i] = 0;
-            }
-            return buffer;
-        }
-
-        playSilent() {
-            if (!this.ctx || this.ctx.state === 'closed') return;
-
-            try {
-                if (this.ctx.state === 'suspended') {
-                    this.ctx.resume().catch(() => {});
-                    return;
-                }
-
-                const source = this.ctx.createBufferSource();
-                source.buffer = this.createSilentBuffer();
-                source.connect(this.ctx.destination);
-                source.start(0);
-                
-                this.source = source;
-                this.isPlaying = true;
-                this.retryCount = 0;
-
-                source.onended = () => {
-                    if (this.isPlaying && this.ctx && this.ctx.state !== 'closed') {
-                        if (this._timer) clearTimeout(this._timer);
-                        this._timer = setTimeout(() => this.playSilent(), 100);
-                    }
-                };
-
-                console.log('[AudioKeepAlive] 静音音频播放中');
-            } catch (err) {
-                console.warn('[AudioKeepAlive] 播放失败:', err.message);
-                this.retryCount++;
-                if (this.retryCount < this.maxRetries) {
-                    setTimeout(() => this.playSilent(), 1000 * this.retryCount);
-                }
-            }
-        }
-
-        init() {
-            if (this.isInitialized) return;
-
-            if (!this.isIOS || !this.isSafari) {
-                console.log('[AudioKeepAlive] 非 iOS Safari，跳过');
-                return;
-            }
-
-            try {
-                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-
-                if (this.ctx.state === 'suspended') {
-                    const resumeOnInteraction = () => {
-                        this.ctx.resume().then(() => {
-                            this.playSilent();
-                        }).catch(() => {});
-                        document.removeEventListener('click', resumeOnInteraction);
-                        document.removeEventListener('touchstart', resumeOnInteraction);
-                        document.removeEventListener('keydown', resumeOnInteraction);
-                    };
-                    this._resumeHandler = resumeOnInteraction;
-                    document.addEventListener('click', resumeOnInteraction);
-                    document.addEventListener('touchstart', resumeOnInteraction);
-                    document.addEventListener('keydown', resumeOnInteraction);
-
-                    setTimeout(() => {
-                        if (this.ctx && this.ctx.state === 'suspended') {
-                            this.ctx.resume().catch(() => {});
-                        }
-                    }, 5000);
-                } else {
-                    this.playSilent();
-                }
-
-                document.addEventListener('visibilitychange', () => {
-                    if (!document.hidden && this.ctx && this.ctx.state === 'suspended') {
-                        this.ctx.resume().catch(() => {});
-                        setTimeout(() => this.playSilent(), 500);
-                    }
-                    if (document.hidden && this.ctx && this.ctx.state === 'running') {
-                        this.playSilent();
-                    }
-                });
-
-                this.isInitialized = true;
-                console.log('[AudioKeepAlive] 初始化成功');
-            } catch (err) {
-                console.warn('[AudioKeepAlive] 初始化失败:', err.message);
-            }
-        }
-
-        stop() {
-            this.isPlaying = false;
-            if (this._timer) {
-                clearTimeout(this._timer);
-                this._timer = null;
-            }
-            if (this.source) {
-                try { this.source.stop(); } catch(e) {}
-                this.source = null;
-            }
-            if (this.ctx && this.ctx.state !== 'closed') {
-                this.ctx.close().catch(() => {});
-            }
-            if (this._resumeHandler) {
-                document.removeEventListener('click', this._resumeHandler);
-                document.removeEventListener('touchstart', this._resumeHandler);
-                document.removeEventListener('keydown', this._resumeHandler);
-                this._resumeHandler = null;
-            }
-        }
-
-        getStatus() {
-            return {
-                isPlaying: this.isPlaying,
-                ctxState: this.ctx ? this.ctx.state : 'none',
-                isIOS: this.isIOS,
-                isInitialized: this.isInitialized
-            };
-        }
+        async play() { if(this.getSettings().backgroundAudioEnabled===false)return false; const audio=this.createAudio(); try{await audio.play();this.isPlaying=true;return true;}catch(e){this.bindUserGesture();return false;} }
+        scheduleResume(delay=500){if(this.retryTimer)clearTimeout(this.retryTimer);this.retryTimer=setTimeout(()=>{if(this.getSettings().backgroundAudioEnabled!==false&&document.hidden&&!this.isPlaying)this.play();},delay);}
+        bindUserGesture(){if(this.userGestureBound)return;this.userGestureBound=true;const handler=async()=>{if(this.getSettings().backgroundAudioEnabled!==false&&!this.isPlaying)await this.play();['click','touchstart','pointerdown','keydown'].forEach(t=>document.removeEventListener(t,handler,true));this.userGestureBound=false;};['click','touchstart','pointerdown','keydown'].forEach(t=>document.addEventListener(t,handler,true));}
+        init(){if(this.isInitialized)return;this.createAudio();this.play();if(!this.visibilityBound){document.addEventListener('visibilitychange',()=>{if(!document.hidden&&this.getSettings().backgroundAudioEnabled!==false&&!this.isPlaying)this.play();if(document.hidden&&this.getSettings().backgroundAudioEnabled!==false&&!this.isPlaying)this.scheduleResume(300);});this.visibilityBound=true;}this.isInitialized=true;}
+        async start(){if(this.getSettings().backgroundAudioEnabled===false)return false;this.init();return this.play();}
+        stop(){if(this.retryTimer){clearTimeout(this.retryTimer);this.retryTimer=null;}if(this.audio){try{this.audio.pause();this.audio.currentTime=0;}catch(e){}}this.isPlaying=false;}
+        destroy(){this.stop();if(this.audio){try{this.audio.remove();}catch(e){}}this.audio=null;this.isInitialized=false;}
+        getStatus(){return{enabled:this.getSettings().backgroundAudioEnabled!==false,isPlaying:this.isPlaying,readyState:this.audio?this.audio.readyState:0,paused:this.audio?this.audio.paused:true,currentTime:this.audio?this.audio.currentTime:0};}
     }
 
     // ==========================================================
-    // 4. 组合管理器（整合所有功能）
+    // 4. MediaSession 可选管理器
     // ==========================================================
-
-    class KeepAliveManager {
-        constructor() {
-            this.audio = new AudioKeepAlive();
-            this.bark = new BarkManager();
-            this.inApp = new InAppMessage();
-            this.isStarted = false;
-            this.reminderTimer = null;
-            this.backgroundStartTime = null;
-            this.isHidden = false;
-            this.notificationShown = false;
-            this._checkInterval = null;
-            this._hasIntercepted = false;
-        }
-
-        async start() {
-            if (this.isStarted) return;
-            console.log('[KeepAlive] 启动组合保活...');
-
-            this.inApp.init();
-            this.bark.loadKey();
-            this.audio.init();
-            this.setupVisibilityListener();
-            this.setupTimers();
-            this.setupMessageInterceptor();
-
-            this.isStarted = true;
-            console.log('[KeepAlive] 组合保活已启动');
-            console.log('[KeepAlive] Bark 状态:', this.bark.isConfigured() ? '✅ 已配置' : '❌ 未配置');
-        }
-
-        setupVisibilityListener() {
-            document.addEventListener('visibilitychange', () => {
-                this.isHidden = document.hidden;
-                
-                if (this.isHidden) {
-                    this.backgroundStartTime = Date.now();
-                    this.notificationShown = false;
-                    console.log('[KeepAlive] 页面进入后台');
-                } else {
-                    console.log('[KeepAlive] 页面回到前台');
-                    if (this.reminderTimer) {
-                        clearTimeout(this.reminderTimer);
-                        this.reminderTimer = null;
-                    }
-                }
-            });
-        }
-
-        setupTimers() {
-    if (this._checkInterval) {
-        clearInterval(this._checkInterval);
+    class MediaSessionManager {
+        constructor(audioProvider){this.audioProvider=audioProvider;this.isEnabled=false;}
+        getSettings(){return(typeof state!=='undefined'&&state&&state.settings)?state.settings:{};}
+        getAudio(){return this.audioProvider?this.audioProvider.audio:null;}
+        isSupported(){return 'mediaSession' in navigator && typeof MediaMetadata!=='undefined';}
+        clearAction(action){if(!this.isSupported())return;try{navigator.mediaSession.setActionHandler(action,null);}catch(e){}}
+        detectImageType(src){if(!src)return'image/png';if(/^data:image\/jpeg/i.test(src)||/\.jpe?g(?:$|\?)/i.test(src))return'image/jpeg';if(/^data:image\/webp/i.test(src)||/\.webp(?:$|\?)/i.test(src))return'image/webp';if(/^data:image\/gif/i.test(src)||/\.gif(?:$|\?)/i.test(src))return'image/gif';return'image/png';}
+        setup(){const s=this.getSettings();if(!s.mediaSessionEnabled||!this.isSupported()){this.disable();return false;}const a=this.getAudio();if(!a)return false;try{const m={title:s.mediaSessionTitle||'梦语 · 后台运行',artist:s.mediaSessionArtist||'梦语',album:s.mediaSessionAlbum||'Dream Talk'};if(s.mediaSessionArtwork)m.artwork=[{src:s.mediaSessionArtwork,sizes:'512x512',type:this.detectImageType(s.mediaSessionArtwork)}];navigator.mediaSession.metadata=new MediaMetadata(m);if(s.mediaSessionPlayPause!==false){navigator.mediaSession.setActionHandler('play',()=>a.play().catch(()=>{}));navigator.mediaSession.setActionHandler('pause',()=>a.pause());}else{this.clearAction('play');this.clearAction('pause');}if(s.mediaSessionNext)navigator.mediaSession.setActionHandler('nexttrack',()=>{if(typeof window.onMediaSessionNext==='function')window.onMediaSessionNext();else console.log('[MediaSession] nexttrack 未绑定业务动作');});else this.clearAction('nexttrack');if(s.mediaSessionPrevious)navigator.mediaSession.setActionHandler('previoustrack',()=>{if(typeof window.onMediaSessionPrevious==='function')window.onMediaSessionPrevious();else console.log('[MediaSession] previoustrack 未绑定业务动作');});else this.clearAction('previoustrack');this.isEnabled=true;return true;}catch(e){console.warn('[MediaSession] 初始化失败:',e);this.isEnabled=false;return false;}}
+        refresh(){return this.setup();}
+        disable(){if(this.isSupported()){['play','pause','nexttrack','previoustrack'].forEach(a=>this.clearAction(a));try{navigator.mediaSession.metadata=null;}catch(e){}}this.isEnabled=false;}
+        getStatus(){return{supported:this.isSupported(),enabled:this.isEnabled};}
     }
-    this._checkInterval = setInterval(() => {
-        if (this.isHidden && this.bark.isConfigured()) {
-            const settings = this._getBarkSettings();
-            // 从 state 读取分钟数，转换为秒
-            const minDelayMinutes = (settings && settings.reminderMin) || 1;
-            const maxDelayMinutes = (settings && settings.reminderMax) || 120;
-            // 分钟 → 秒 转换
-            const minDelay = minDelayMinutes * 60;
-            const maxDelay = maxDelayMinutes * 60;
-            // 取随机值
-            const delay = minDelay + Math.random() * (maxDelay - minDelay);
-            const duration = (Date.now() - this.backgroundStartTime) / 1000;
+
+    // ==========================================================
+    // 4. 组合管理器（整合所有功能）- 修复版
+// ==========================================================
+
+class KeepAliveManager {
+    constructor() {
+        this.audio = new BackgroundAudioKeepAlive();
+        this.mediaSession = new MediaSessionManager(this.audio);
+        this.bark = new BarkManager();
+        this.inApp = new InAppMessage();
+        this.isStarted = false;
+        this.reminderTimer = null;
+        this.backgroundStartTime = null;
+        this.isHidden = false;
+        this.notificationShown = false;
+        this._checkInterval = null;
+        this._hasIntercepted = false;
+    }
+
+    async start() {
+        if (this.isStarted) return;
+        console.log('[KeepAlive] 启动组合保活...');
+
+        this.inApp.init();
+        this.bark.loadKey();
+        this.audio.init();
+        this.mediaSession.setup();
+        this.setupVisibilityListener();
+        this.setupTimers();
+        this.setupMessageInterceptor();
+
+        this.isStarted = true;
+        console.log('[KeepAlive] 组合保活已启动');
+        console.log('[KeepAlive] Bark 状态:', this.bark.isConfigured() ? '✅ 已配置' : '❌ 未配置');
+    }
+
+    // ===== 修改点 1：visibilitychange 监听 =====
+    setupVisibilityListener() {
+        document.addEventListener('visibilitychange', () => {
+            this.isHidden = document.hidden;
             
-            if (duration > delay && !this.notificationShown) {
-                this.notificationShown = true;
-                this.bark.notifyReminder();
-                console.log('[KeepAlive] 发送后台提醒，延迟:', Math.round(delay / 60), '分钟');
+            if (this.isHidden) {
+                // 进入后台：立即设置单次定时器
+                this.backgroundStartTime = Date.now();
+                this.notificationShown = false;
+                console.log('[KeepAlive] 页面进入后台，开始计时');
+                
+                const settings = this._getBarkSettings();
+                const minDelayMinutes = (settings && settings.reminderMin) || 1;
+                const maxDelayMinutes = (settings && settings.reminderMax) || 120;
+                const minDelay = minDelayMinutes * 60 * 1000;
+                const maxDelay = maxDelayMinutes * 60 * 1000;
+                const delay = minDelay + Math.random() * (maxDelay - minDelay);
+                
+                if (this.reminderTimer) {
+                    clearTimeout(this.reminderTimer);
+                    this.reminderTimer = null;
+                }
+                
+                this.reminderTimer = setTimeout(() => {
+                    if (this.isHidden && this.bark.isConfigured() && !this.notificationShown) {
+                        this.notificationShown = true;
+                        this.bark.notifyReminder();
+                        console.log('[KeepAlive] 后台定时器触发，延迟:', Math.round(delay / 60000), '分钟');
+                    }
+                }, delay);
+                
+                console.log('[KeepAlive] 后台提醒将在', Math.round(delay / 60000), '分钟后触发');
+                
+            } else {
+                console.log('[KeepAlive] 页面回到前台');
+                if (this.reminderTimer) {
+                    clearTimeout(this.reminderTimer);
+                    this.reminderTimer = null;
+                }
+                this.notificationShown = false;
+                this.backgroundStartTime = null;
             }
+        });
+    }
+
+    // ===== 修改点 2：定时器检查 =====
+    setupTimers() {
+        if (this._checkInterval) {
+            clearInterval(this._checkInterval);
         }
-    }, 30000);
-}
+        // 每 10 秒检查一次（用于补偿）
+        this._checkInterval = setInterval(() => {
+            if (this.isHidden && this.bark.isConfigured()) {
+                const settings = this._getBarkSettings();
+                const minDelayMinutes = (settings && settings.reminderMin) || 1;
+                const maxDelayMinutes = (settings && settings.reminderMax) || 120;
+                const minDelay = minDelayMinutes * 60;
+                const maxDelay = maxDelayMinutes * 60;
+                const delay = minDelay + Math.random() * (maxDelay - minDelay);
+                const duration = (Date.now() - this.backgroundStartTime) / 1000;
+                
+                if (duration > delay && !this.notificationShown) {
+                    this.notificationShown = true;
+                    this.bark.notifyReminder();
+                    console.log('[KeepAlive] 后台检查触发，延迟:', Math.round(delay / 60), '分钟');
+                }
+            }
+        }, 10000);  // 10 秒检查一次
+    }
 
         _getBarkSettings() {
             if (typeof state !== 'undefined' && state && state.settings && state.settings.bark) {
@@ -6528,6 +6485,7 @@ if (originalSimulateReply) {
                 isStarted: this.isStarted,
                 isHidden: this.isHidden,
                 audio: this.audio.getStatus(),
+                mediaSession: this.mediaSession.getStatus(),
                 bark: this.getBarkStatus()
             };
         }
@@ -6541,7 +6499,8 @@ if (originalSimulateReply) {
                 clearTimeout(this.reminderTimer);
                 this.reminderTimer = null;
             }
-            this.audio.stop();
+            this.mediaSession.disable();
+            this.audio.destroy();
             this.isStarted = false;
         }
     }
@@ -6574,6 +6533,14 @@ if (originalSimulateReply) {
 
     console.log('[KeepAlive] 模块已加载');
 })();
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.id === 'mediaSessionArtworkFile') {
+            const file=e.target.files&&e.target.files[0]; if(!file)return;
+            if(file.size>2*1024*1024){showNote('封面图片不能超过 2MB','warning');e.target.value='';return;}
+            const reader=new FileReader(); reader.onload=function(ev){state.settings.mediaSessionArtwork=ev.target.result;saveState();openSettingsSub('background');showNote('媒体封面已更新','success');}; reader.onerror=function(){showNote('封面读取失败','error');}; reader.readAsDataURL(file); e.target.value='';
+        }
+    });
+
     // ===================== 初始化 =====================
     async function init() {
         state = loadState();
