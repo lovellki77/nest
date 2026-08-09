@@ -7,6 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
     <title>梦语</title>
+<!-- v6：主动消息保持上一版正常调度，保留10秒前台兜底；输入状态与未读同步优化 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
@@ -3178,20 +3179,29 @@ if (!newState.settings.autoReply) {
         const seq = ++__badgeRefreshSeq;
         var btn = document.getElementById('chatNavBtn');
         if (!btn) return;
-        btn.querySelectorAll('.nav-badge').forEach(el => el.remove());
         let total = 0;
         const partners = Array.isArray(state.partners) ? state.partners : [];
         try {
-            for (const partner of partners) {
-                const lastRead = state._lastRead[partner.id] || 0;
+            const counts = await Promise.all(partners.map(async function(partner) {
+                const lastRead = (state._lastRead && state._lastRead[partner.id]) || 0;
                 const msgs = await loadMessagesFromDB(partner.id, 9999, 0);
-                for (const msg of msgs) if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > lastRead) total++;
+                let count = 0;
+                for (const msg of msgs) {
+                    if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > lastRead) count++;
+                }
+                return count;
+            }));
+            total = counts.reduce((a, b) => a + b, 0);
+            // 只让最新一次刷新结果改 DOM，避免异步查询先后顺序覆盖新状态。
+            if (seq !== __badgeRefreshSeq || !document.body.contains(btn)) return;
+            btn.querySelectorAll('.nav-badge').forEach(function(el) { el.remove(); });
+            if (total > 0) {
+                var b = document.createElement('span');
+                b.className = 'nav-badge';
+                b.textContent = total > 99 ? '99+' : total;
+                btn.appendChild(b);
             }
-            if (seq !== __badgeRefreshSeq) return;
-            if (total > 0 && document.body.contains(btn)) {
-                const b=document.createElement('span'); b.className='nav-badge'; b.textContent=total>99?'99+':total; btn.appendChild(b);
-            }
-        } catch(e) { console.warn('[Badge] 刷新未读失败:',e); }
+        } catch(e) { console.warn('[Badge] 刷新未读失败:', e); }
     }
 
     function clearUnread() {
@@ -3560,7 +3570,7 @@ function showPartnerTyping(partnerId) {
     setPartnerTyping(partnerId, true);
     window.__typingClearTimers = window.__typingClearTimers || {};
     if (window.__typingClearTimers[partnerId]) clearTimeout(window.__typingClearTimers[partnerId]);
-    const maxWait=Math.max(8000,(state.settings.maxReplyDelay||5)*3000);
+    const maxWait=Math.max(15000,(state.settings.maxReplyDelay||5)*1000+10000);
     window.__typingClearTimers[partnerId]=setTimeout(function(){ delete window.__typingClearTimers[partnerId]; completePartnerReply(partnerId); },maxWait);
     const c=document.getElementById('chatMessages');
     if(c && state.currentPartnerId===partnerId) c.scrollTop=c.scrollHeight;
@@ -6271,23 +6281,38 @@ async function runScheduledAutoMessage() {
     if (__autoMessageRunning) return;
     __autoMessageRunning = true;
     autoMsgTimer = null;
-    if (!state.settings.autoMessageEnabled) { __autoMessageRunning=false; return; }
+    if (!state.settings.autoMessageEnabled) { __autoMessageRunning = false; return; }
+    const firedAt = Date.now();
+    console.log('[MSG-PROACTIVE] timer fired', { dueAt: window.__autoMessageDueAt || null, firedAt, hidden: document.hidden });
     try {
-        console.log('[MSG-PROACTIVE] timer fired', {dueAt:window.__autoMessageDueAt||null, firedAt:Date.now(), hidden:document.hidden});
-        const onlinePartners=state.partners.filter(p=>p.online);
-        if (!onlinePartners.length) return;
-        const randomPartner=onlinePartners[Math.floor(Math.random()*onlinePartners.length)];
-        console.log('[MSG-PROACTIVE] selected',randomPartner.id);
-        const replyContent=await generateReplyContent(randomPartner.id);
-        if (!replyContent) return;
-        const replyMsg={sender:randomPartner.id,timestamp:Date.now(),...replyContent};
-        replyMsg.id=await saveMessageToDB(randomPartner.id,replyMsg);
-        console.log('[MSG-PROACTIVE] saved',{partnerId:randomPartner.id,id:replyMsg.id});
-        notifyBarkForPartnerMessage(randomPartner.id,replyMsg,'partner_proactive');
-        if(randomPartner.id===state.currentPartnerId && chatLoader && chatLoader.partnerId===randomPartner.id && !document.getElementById('chatScreen').classList.contains('hidden')) chatLoader.appendMessage(replyMsg);
-        await updateBadge(); saveState();
-    } catch(e) { console.error('[MSG-PROACTIVE] failed:',e); }
-    finally { __autoMessageRunning=false; scheduleAutoMessage(); }
+        var onlinePartners = state.partners.filter(p => p.online);
+        if (onlinePartners.length === 0) {
+            console.log('[MSG-PROACTIVE] no online partner, rescheduling');
+            return;
+        }
+        var randomPartner = onlinePartners[Math.floor(Math.random() * onlinePartners.length)];
+        const replyContent = await generateReplyContent(randomPartner.id);
+        if (!replyContent) {
+            console.warn('[MSG-PROACTIVE] generated no content', { partnerId: randomPartner.id });
+            return;
+        }
+        const replyMsg = { sender: randomPartner.id, timestamp: Date.now(), ...replyContent };
+        const replyId = await saveMessageToDB(randomPartner.id, replyMsg);
+        replyMsg.id = replyId;
+        console.log('[MSG-PROACTIVE] saved', { partnerId: randomPartner.id, id: replyId });
+        // 主动消息不显示“正在输入”，直接作为新消息到达。
+        notifyBarkForPartnerMessage(randomPartner.id, replyMsg, 'partner_proactive');
+        if (randomPartner.id === state.currentPartnerId && chatLoader && chatLoader.partnerId === randomPartner.id && !document.getElementById('chatScreen').classList.contains('hidden')) {
+            chatLoader.appendMessage(replyMsg);
+        }
+        await updateBadge();
+        saveState();
+    } catch (e) {
+        console.error('[MSG-PROACTIVE] failed:', e);
+    } finally {
+        __autoMessageRunning = false;
+        scheduleAutoMessage();
+    }
 }
 
 function restartAutoMessage() {
@@ -7461,6 +7486,7 @@ class KeepAliveManager {
         window.__autoMessageHeartbeat = setInterval(function() {
             if (document.hidden) return;
             if (state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !window.__autoMessageRunning) {
+                // 只清掉已经到期的旧 timer；正常 timer 尚未到期时完全不干预。
                 if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
                 runScheduledAutoMessage();
             }
