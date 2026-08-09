@@ -1774,7 +1774,7 @@ html.dark-mode .inAppToast .toast-btn-secondary {
 
     // ===================== IndexedDB 管理 =====================
     const DB_NAME = 'MengyuDB';
-    const DB_VERSION = 4;
+    const DB_VERSION = 4; // 保持 v4：本次修复不升级数据库版本
     const STORE_NAME = 'messages';
     const EMOJI_STORE = 'emojis';
 
@@ -1821,8 +1821,15 @@ html.dark-mode .inAppToast .toast-btn-secondary {
             let savedId = null;
             request.onsuccess = () => { savedId = request.result; };
             request.onerror = () => reject(request.error);
-            transaction.oncomplete = () => resolve(savedId);
-            transaction.onerror = () => reject(transaction.error);
+            transaction.oncomplete = () => {
+                if (savedId == null) {
+                    reject(new Error('消息写入事务完成，但未返回消息ID'));
+                } else {
+                    resolve(savedId);
+                }
+            };
+            transaction.onerror = () => reject(transaction.error || new Error('消息数据库写入失败'));
+            transaction.onabort = () => reject(transaction.error || new Error('消息数据库写入事务被中止'));
         });
     }
 
@@ -1844,26 +1851,80 @@ html.dark-mode .inAppToast .toast-btn-secondary {
         });
     }
 
+    // 消息读取：优先使用现有索引；如果旧版/异常设备上的索引不可用，则直接扫描 messages。
+    // 不升级数据库版本、不删除任何现有消息。
+    function loadMessagesFromStoreFallback(store, partnerId, limit, offset, resolve, reject) {
+        const all = [];
+        let cursorReq;
+        try {
+            cursorReq = store.openCursor();
+        } catch (e) {
+            reject(e);
+            return;
+        }
+        cursorReq.onsuccess = (event) => {
+            const cur = event.target.result;
+            if (cur) {
+                const value = cur.value;
+                if (value && String(value.partnerId) === String(partnerId)) all.push(value);
+                cur.continue();
+            } else {
+                all.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                resolve(all.slice(offset, offset + limit));
+            }
+        };
+        cursorReq.onerror = () => reject(cursorReq.error);
+    }
+
     async function loadMessagesFromDB(partnerId, limit = 30, offset = 0) {
         const db = await openDB();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(STORE_NAME, 'readonly');
             const store = transaction.objectStore(STORE_NAME);
-            const index = store.index('partner_timestamp');
-            const range = IDBKeyRange.bound([partnerId, 0], [partnerId, Number.MAX_SAFE_INTEGER]);
-            const cursor = index.openCursor(range, 'prev');
-            const results = [];
-            let skipped = 0;
-            let loaded = 0;
-            cursor.onsuccess = (event) => {
-                const cur = event.target.result;
-                if (cur) {
-                    if (skipped < offset) { skipped++; cur.continue(); } 
-                    else if (loaded < limit) { results.push(cur.value); loaded++; cur.continue(); } 
-                    else { resolve(results); }
-                } else { resolve(results); }
+            let settled = false;
+            const finish = (value) => {
+                if (!settled) {
+                    settled = true;
+                    resolve(value);
+                }
             };
-            cursor.onerror = () => reject(cursor.error);
+
+            try {
+                if (!store.indexNames.contains('partner_timestamp')) {
+                    loadMessagesFromStoreFallback(store, partnerId, limit, offset, finish, reject);
+                    return;
+                }
+
+                const index = store.index('partner_timestamp');
+                const range = IDBKeyRange.bound([partnerId, 0], [partnerId, Number.MAX_SAFE_INTEGER]);
+                const cursor = index.openCursor(range, 'prev');
+                const results = [];
+                let skipped = 0;
+                let loaded = 0;
+
+                cursor.onsuccess = (event) => {
+                    const cur = event.target.result;
+                    if (cur) {
+                        if (skipped < offset) {
+                            skipped++;
+                            cur.continue();
+                        } else if (loaded < limit) {
+                            results.push(cur.value);
+                            loaded++;
+                            cur.continue();
+                        } else {
+                            finish(results);
+                        }
+                    } else {
+                        finish(results);
+                    }
+                };
+                cursor.onerror = () => {
+                    if (!settled) loadMessagesFromStoreFallback(store, partnerId, limit, offset, finish, reject);
+                };
+            } catch (e) {
+                loadMessagesFromStoreFallback(store, partnerId, limit, offset, finish, reject);
+            }
         });
     }
 
@@ -1872,11 +1933,36 @@ html.dark-mode .inAppToast .toast-btn-secondary {
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(STORE_NAME, 'readonly');
             const store = transaction.objectStore(STORE_NAME);
-            const index = store.index('partner_timestamp');
-            const range = IDBKeyRange.bound([partnerId, 0], [partnerId, Number.MAX_SAFE_INTEGER]);
-            const count = index.count(range);
-            count.onsuccess = () => resolve(count.result);
-            count.onerror = () => reject(count.error);
+
+            const fallbackCount = () => {
+                let total = 0;
+                let req;
+                try { req = store.openCursor(); } catch (e) { reject(e); return; }
+                req.onsuccess = (event) => {
+                    const cur = event.target.result;
+                    if (cur) {
+                        if (cur.value && String(cur.value.partnerId) === String(partnerId)) total++;
+                        cur.continue();
+                    } else {
+                        resolve(total);
+                    }
+                };
+                req.onerror = () => reject(req.error);
+            };
+
+            try {
+                if (!store.indexNames.contains('partner_timestamp')) {
+                    fallbackCount();
+                    return;
+                }
+                const index = store.index('partner_timestamp');
+                const range = IDBKeyRange.bound([partnerId, 0], [partnerId, Number.MAX_SAFE_INTEGER]);
+                const count = index.count(range);
+                count.onsuccess = () => resolve(count.result);
+                count.onerror = fallbackCount;
+            } catch (e) {
+                fallbackCount();
+            }
         });
     }
 
@@ -4515,12 +4601,6 @@ function renderPokeSettingsContent() {
             case 'back-to-settings-main': renderSettingsMain(); break;
             case 'toggle':
                 var toggleEl = target.closest('.toggle') || target;
-                // iOS/iPad 触摸兜底：touchend 已处理的 Bark 开关不再重复响应后续 click。
-                if ((toggleEl.id === 'barkSendOnPartnerToggle' || toggleEl.id === 'barkSendOnReminderToggle') &&
-                    toggleEl.getAttribute('data-touch-handled') === '1') {
-                    toggleEl.removeAttribute('data-touch-handled');
-                    break;
-                }
                 toggleEl.classList.toggle('active');
                 var key = toggleEl.getAttribute('data-key');
                 var enabled = toggleEl.classList.contains('active');
@@ -4792,31 +4872,13 @@ case 'clear-pokes': clearAllPokes(); break;
         window._stampDragId = null;
     });
 
-    // Bark 开关 iOS/iPad 触摸兜底：仅处理这两个开关，不影响其他设置项。
+    // Bark 开关仅增加 iOS/iPad 触摸入口：统一转交给原有 click 处理逻辑，避免触摸事件直接写数据库。
     document.getElementById('settingsScreen').addEventListener('touchend', function(e) {
         const el = e.target && e.target.closest ? e.target.closest('#barkSendOnPartnerToggle, #barkSendOnReminderToggle') : null;
         if (!el) return;
         e.preventDefault();
-        e.stopPropagation();
-        el.classList.toggle('active');
-        const key = el.getAttribute('data-key');
-        const enabled = el.classList.contains('active');
-        if (!state.settings) state.settings = {};
-        if (!state.settings.bark) state.settings.bark = {};
-        state.settings.bark[key] = enabled;
-        el.setAttribute('aria-checked', enabled ? 'true' : 'false');
-        el.setAttribute('data-touch-handled', '1');
-        saveState();
-        console.log('[Bark] 触摸开关已更新:', key, enabled);
-    }, { passive: false });
-
-    // Bark 开关键盘/辅助功能支持：Enter / Space 与点击行为一致。
-    document.getElementById('settingsScreen').addEventListener('keydown', function(e) {
-        const el = e.target && e.target.closest ? e.target.closest('#barkSendOnPartnerToggle, #barkSendOnReminderToggle') : null;
-        if (!el || (e.key !== 'Enter' && e.key !== ' ')) return;
-        e.preventDefault();
         el.click();
-    });
+    }, { passive: false });
 
     document.getElementById('settingsScreen').addEventListener('input', function(e) {
         if (e.target.matches('input[type="range"]')) { updateRangeSetting(e.target); }
