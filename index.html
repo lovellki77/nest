@@ -3421,7 +3421,6 @@ checkAndSendAutoReply(state.currentPartnerId);
             { type: 'chat', icon: 'fa-comments', label: '私语设置' },
             { type: 'partner', icon: 'fa-user-group', label: '伴侣管理' },
             { type: 'interact', icon: 'fa-sliders-h', label: '交互构建' },
-            { type: 'background', icon: 'fa-headphones', label: '后台运行' },
             { type: 'data', icon: 'fa-database', label: '数据监控' }
         ];
         cards.forEach(function(c) {
@@ -3589,10 +3588,10 @@ window.clearAllPokes = function() {
         const s=state.settings||{}; const media=s.mediaSessionEnabled===true; const art=s.mediaSessionArtwork||'';
         return `<div class="card"><div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-headphones"></i> 后台运行</div><div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px;">使用网页原生音频播放能力提高后台媒体存活能力，不显示网页播放器。实际后台行为仍由系统和浏览器决定。</div>${renderToggle('后台音频保活','backgroundAudioEnabled',s.backgroundAudioEnabled!==false)}</div><div class="card" style="margin-top:12px;"><div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-mobile-screen-button"></i> 系统媒体信息</div><div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px;">可选。开启后，支持的系统可能在锁屏或媒体控制区域显示标题、作者和封面。</div>${renderToggle('启用 MediaSession','mediaSessionEnabled',media)}<div id="mediaSessionSettings" style="display:${media?'block':'none'};margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);"><label style="font-size:12px;color:var(--text-secondary);">标题</label><input id="mediaSessionTitleInput" type="text" maxlength="80" value="${escapeHTML(s.mediaSessionTitle||'梦语 · 后台运行')}" style="margin:4px 0 10px;"><label style="font-size:12px;color:var(--text-secondary);">作者</label><input id="mediaSessionArtistInput" type="text" maxlength="80" value="${escapeHTML(s.mediaSessionArtist||'梦语')}" style="margin:4px 0 10px;"><label style="font-size:12px;color:var(--text-secondary);">专辑</label><input id="mediaSessionAlbumInput" type="text" maxlength="80" value="${escapeHTML(s.mediaSessionAlbum||'Dream Talk')}" style="margin:4px 0 10px;"><label style="font-size:12px;color:var(--text-secondary);">封面 URL</label><input id="mediaSessionArtworkInput" type="text" value="${escapeHTML(art)}" placeholder="https://... 或 data:image/..." style="margin:4px 0 8px;"><input id="mediaSessionArtworkFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;"><button class="primary-btn" data-action="choose-media-artwork" style="width:100%;margin-bottom:10px;"><i class="fa-solid fa-image"></i> 选择本地封面</button>${art?`<div style="display:flex;justify-content:center;margin-bottom:10px;"><img src="${escapeHTML(art)}" style="width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid var(--border-light);"></div>`:''}${renderToggle('播放 / 暂停控制','mediaSessionPlayPause',s.mediaSessionPlayPause!==false)}${renderToggle('下一项控制','mediaSessionNext',s.mediaSessionNext===true)}${renderToggle('上一项控制','mediaSessionPrevious',s.mediaSessionPrevious===true)}<button class="primary-btn" data-action="save-media-session" style="width:100%;margin-top:12px;"><i class="fa-solid fa-save"></i> 保存媒体信息</button></div></div>`;
     }
-    function saveMediaSessionSettings(){state.settings.mediaSessionTitle=(document.getElementById('mediaSessionTitleInput')?.value||'').trim()||'梦语 · 后台运行';state.settings.mediaSessionArtist=(document.getElementById('mediaSessionArtistInput')?.value||'').trim()||'梦语';state.settings.mediaSessionAlbum=(document.getElementById('mediaSessionAlbumInput')?.value||'').trim()||'Dream Talk';state.settings.mediaSessionArtwork=(document.getElementById('mediaSessionArtworkInput')?.value||'').trim();saveState();if(window.keepAliveManager)window.keepAliveManager.mediaSession.refresh();showNote('系统媒体信息已保存','success');openSettingsSub('background');}
+    function saveMediaSessionSettings(){state.settings.mediaSessionTitle=(document.getElementById('mediaSessionTitleInput')?.value||'').trim()||'梦语 · 后台运行';state.settings.mediaSessionArtist=(document.getElementById('mediaSessionArtistInput')?.value||'').trim()||'梦语';state.settings.mediaSessionAlbum=(document.getElementById('mediaSessionAlbumInput')?.value||'').trim()||'Dream Talk';state.settings.mediaSessionArtwork=(document.getElementById('mediaSessionArtworkInput')?.value||'').trim();saveState();if(window.keepAliveManager)window.keepAliveManager.mediaSession.refresh();showNote('系统媒体信息已保存','success');switchAppearanceTab('background');}
 
     // ========== 外观美化 ==========
-    function renderAppearanceSettings() {
+    function renderAppearanceSettingsLegacy() {
     // ===== 获取 Bark 设置状态 =====
     const status = typeof getBarkStatus === 'function' ? getBarkStatus() : { isConfigured: false };
     const key = typeof getBarkKey === 'function' ? getBarkKey() : '';
@@ -3943,6 +3942,48 @@ function renderPokeSettingsContent() {
     return html;
 }
 
+
+    // ========== 外观美化：内部标签页 ========== 
+    window.switchAppearanceTab = function(tab) {
+        var allowed = ['stamp', 'labels', 'bark', 'background'];
+        if (allowed.indexOf(tab) === -1) tab = 'stamp';
+        window._appearanceTab = tab;
+        openSettingsSub('appearance');
+    };
+
+    function renderAppearanceSettings() {
+        var activeTab = window._appearanceTab || 'stamp';
+        var legacy = document.createElement('div');
+        legacy.innerHTML = renderAppearanceSettingsLegacy();
+        var cards = Array.prototype.slice.call(legacy.children);
+        var stampCard = cards[0] ? cards[0].outerHTML : '';
+        var labelsCard = cards[1] ? cards[1].outerHTML : '';
+        var barkCard = cards[2] ? cards[2].outerHTML : '';
+        var backgroundCard = renderBackgroundSettings();
+
+        var tabs = [
+            ['stamp', 'fa-stamp', '自定义印章'],
+            ['labels', 'fa-tags', '交互标签'],
+            ['bark', 'fa-bell', 'Bark 推送'],
+            ['background', 'fa-headphones', '后台运行']
+        ];
+        var html = '<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px;">';
+        html += '<div class="appearance-settings-tabs" style="display:flex;gap:4px;overflow-x:auto;padding:6px;border-bottom:1px solid var(--border-light);-webkit-overflow-scrolling:touch;scrollbar-width:none;">';
+        tabs.forEach(function(t) {
+            var active = activeTab === t[0];
+            html += '<button type="button" onclick="switchAppearanceTab(\'' + t[0] + '\')" style="flex:0 0 auto;border:0;background:' + (active ? 'var(--bg-card)' : 'transparent') + ';color:' + (active ? 'var(--text-primary)' : 'var(--text-secondary)') + ';padding:9px 13px;border-radius:8px;font-size:12px;font-weight:' + (active ? '600' : '500') + ';cursor:pointer;white-space:nowrap;box-shadow:' + (active ? '0 1px 4px rgba(0,0,0,0.06)' : 'none') + ';">' + '<i class="fa-solid ' + t[1] + '" style="margin-right:5px;"></i>' + t[2] + '</button>';
+        });
+        html += '</div></div>';
+
+        html += '<div class="appearance-settings-panel" data-appearance-tab="' + activeTab + '">';
+        if (activeTab === 'labels') html += labelsCard;
+        else if (activeTab === 'bark') html += barkCard;
+        else if (activeTab === 'background') html += backgroundCard;
+        else html += stampCard;
+        html += '</div>';
+        return html;
+    }
+
     function renderInteractSettings() {
     if (typeof window._interactTab === 'undefined') {
         window._interactTab = 'wordcard';
@@ -4254,7 +4295,7 @@ case 'clear-pokes': clearAllPokes(); break;
                     var subPage = document.getElementById('settingsSubPage');
                     if (subPage && subPage.classList.contains('active')) {
                         var currentType = subPage.getAttribute('data-type') || 'appearance';
-                        openSettingsSub(currentType);
+                        switchAppearanceTab(currentType === 'appearance' ? 'stamp' : (window._appearanceTab || 'stamp'));
                     }
                     showNote('自定义印章已更新', 'success');
                 };
@@ -6537,7 +6578,7 @@ if (originalSimulateReply) {
         if (e.target && e.target.id === 'mediaSessionArtworkFile') {
             const file=e.target.files&&e.target.files[0]; if(!file)return;
             if(file.size>2*1024*1024){showNote('封面图片不能超过 2MB','warning');e.target.value='';return;}
-            const reader=new FileReader(); reader.onload=function(ev){state.settings.mediaSessionArtwork=ev.target.result;saveState();openSettingsSub('background');showNote('媒体封面已更新','success');}; reader.onerror=function(){showNote('封面读取失败','error');}; reader.readAsDataURL(file); e.target.value='';
+            const reader=new FileReader(); reader.onload=function(ev){state.settings.mediaSessionArtwork=ev.target.result;saveState();switchAppearanceTab('background');showNote('媒体封面已更新','success');}; reader.onerror=function(){showNote('封面读取失败','error');}; reader.readAsDataURL(file); e.target.value='';
         }
     });
 
