@@ -3166,33 +3166,32 @@ if (!newState.settings.autoReply) {
         if (name === 'settings') { stopChatSync(); renderSettingsMain(); }
         // 导航切换本身也必须刷新未读徽标，不能依赖再次进入聊天页。
         setTimeout(updateBadge, 0);
+        setTimeout(updateBadge, 250);
+        setTimeout(updateBadge, 800);
         hideContextMenu();
     }
 
     function sortedPartners() { return state.partners.slice().sort((a,b) => a.pinned !== b.pinned ? (a.pinned ? -1 : 1) : a.order - b.order); }
 
-    function updateBadge() {
+    let __badgeRefreshSeq = 0;
+    async function updateBadge() {
+        const seq = ++__badgeRefreshSeq;
         var btn = document.getElementById('chatNavBtn');
-        var existing = btn.querySelectorAll('.nav-badge');
-        existing.forEach(function(el) { el.remove(); });
-        (async function() {
-            let total = 0;
-            for (var pid in state._lastRead) {
-                const msgs = await loadMessagesFromDB(pid, 9999, 0);
-                for (var j = 0; j < msgs.length; j++) {
-                    var msg = msgs[j];
-                    if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > (state._lastRead[pid] || 0)) {
-                        total++;
-                    }
-                }
+        if (!btn) return;
+        btn.querySelectorAll('.nav-badge').forEach(el => el.remove());
+        let total = 0;
+        const partners = Array.isArray(state.partners) ? state.partners : [];
+        try {
+            for (const partner of partners) {
+                const lastRead = state._lastRead[partner.id] || 0;
+                const msgs = await loadMessagesFromDB(partner.id, 9999, 0);
+                for (const msg of msgs) if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > lastRead) total++;
             }
-            if (total > 0) {
-                var b = document.createElement('span');
-                b.className = 'nav-badge';
-                b.textContent = total > 99 ? '99+' : total;
-                btn.appendChild(b);
+            if (seq !== __badgeRefreshSeq) return;
+            if (total > 0 && document.body.contains(btn)) {
+                const b=document.createElement('span'); b.className='nav-badge'; b.textContent=total>99?'99+':total; btn.appendChild(b);
             }
-        })();
+        } catch(e) { console.warn('[Badge] 刷新未读失败:',e); }
     }
 
     function clearUnread() {
@@ -3557,12 +3556,27 @@ function renderTypingPartners() {
     wrap.style.display = (state.settings.showTyping && ids.length) ? 'flex' : 'none';
 }
 function showPartnerTyping(partnerId) {
-    if (!state.settings.showTyping) return;
+    if (!state.settings.showTyping || !partnerId) return;
     setPartnerTyping(partnerId, true);
-    const c = document.getElementById('chatMessages');
-    if (c && state.currentPartnerId === partnerId) c.scrollTop = c.scrollHeight;
+    window.__typingClearTimers = window.__typingClearTimers || {};
+    if (window.__typingClearTimers[partnerId]) clearTimeout(window.__typingClearTimers[partnerId]);
+    const maxWait=Math.max(8000,(state.settings.maxReplyDelay||5)*3000);
+    window.__typingClearTimers[partnerId]=setTimeout(function(){ delete window.__typingClearTimers[partnerId]; completePartnerReply(partnerId); },maxWait);
+    const c=document.getElementById('chatMessages');
+    if(c && state.currentPartnerId===partnerId) c.scrollTop=c.scrollHeight;
 }
 function hidePartnerTyping(partnerId) { setPartnerTyping(partnerId, false); }
+
+// 统一处理“伴侣回复完成”状态。
+// 关键点：无论用户此刻是否仍停留在该伴侣聊天页，都必须清除对应 typing 状态。
+// 这样切换伴侣/导航栏不会把旧伴侣永久留在“正在输入”。
+function completePartnerReply(partnerId) {
+    if (!partnerId) return;
+    if(window.__typingClearTimers && window.__typingClearTimers[partnerId]) { clearTimeout(window.__typingClearTimers[partnerId]); delete window.__typingClearTimers[partnerId]; }
+    hidePartnerTyping(partnerId);
+    renderTypingPartners();
+    updateBadge();
+}
 
 // 当前聊天实时同步：以 IndexedDB 为最终事实来源，避免 Safari/PWA 中直接 append 的生命周期差异。
 let chatSyncTimer = null;
@@ -3598,6 +3612,7 @@ function simulateReply() {
     showPartnerTyping(replyPartnerId);
     // 如果字卡库为空，不回复
     if (!state.wordCards || state.wordCards.length === 0) {
+        completePartnerReply(replyPartnerId);
         return;
     }
 
@@ -3653,8 +3668,11 @@ function simulateReply() {
                             clearUnread();
                         }
                     }
+                    completePartnerReply(replyPartnerId);
                     updateBadge();
                     saveState();
+                } else {
+                    completePartnerReply(replyPartnerId);
                 }
             }, 1500 + Math.random() * 2000);
             
@@ -3708,10 +3726,9 @@ function simulateReply() {
                 saveState();
             }
             if (i === replyCount - 1) {
-                const tiWrapper = document.getElementById('typingIndicator');
-                hidePartnerTyping(replyPartnerId);
-// 在收到伴侣消息后调用
-checkAndSendAutoReply(state.currentPartnerId);
+                completePartnerReply(replyPartnerId);
+                // 自动回复只针对本次回复所属的伴侣，绝不能读取变化后的 currentPartnerId。
+                checkAndSendAutoReply(replyPartnerId);
             }
         }, delay);
     }
@@ -3773,6 +3790,7 @@ checkAndSendAutoReply(state.currentPartnerId);
     for (var j = 0; j < count; j++) {
         (function(idx) {
             setTimeout(async function() {
+                try {
                 const replyContent = await generateReplyContent(partnerId);
                 if (replyContent) {
                     const replyMsg = { sender: partnerId, timestamp: Date.now(), ...replyContent };
@@ -3780,7 +3798,6 @@ checkAndSendAutoReply(state.currentPartnerId);
                     replyMsg.id = replyId;
                     notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                     if (state.currentPartnerId === partnerId && chatLoader) {
-                        if (idx === count - 1) hidePartnerTyping(partnerId);
                         chatLoader.appendMessage(replyMsg);
                         if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
                     }
@@ -3793,6 +3810,8 @@ checkAndSendAutoReply(state.currentPartnerId);
                 if (idx === count - 1) {
                     checkAndSendAutoReply(partnerId);
                 }
+                } catch(e) { console.error('[REPLY] reply generation failed:',e); }
+                finally { if (idx === count - 1) completePartnerReply(partnerId); }
             }, idx * 1200);
         })(j);
     }
@@ -3854,11 +3873,11 @@ checkAndSendAutoReply(state.currentPartnerId);
                             replyMsg.id = replyId;
                             notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                             if (state.currentPartnerId === partnerId && chatLoader) {
-                                if (idx === count - 1) hidePartnerTyping(partnerId);
                                 chatLoader.appendMessage(replyMsg);
                                 if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
                             }
                         }
+                        if (idx === count - 1) completePartnerReply(partnerId);
                         updateBadge();
                         saveState();
                     }, idx * 1200);
@@ -3884,6 +3903,7 @@ checkAndSendAutoReply(state.currentPartnerId);
             const partner = getPartner(partnerId);
             if (partner && partner.online) {
                 setTimeout(async function() {
+                    showPartnerTyping(partnerId);
                     const replyContent = await generateReplyContent(partnerId);
                     if (replyContent) {
                         const replyMsg = { sender: partnerId, timestamp: Date.now(), ...replyContent };
@@ -3891,7 +3911,10 @@ checkAndSendAutoReply(state.currentPartnerId);
                         replyMsg.id = replyId;
                         notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                         if (chatLoader && state.currentPartnerId === partnerId) { chatLoader.appendMessage(replyMsg); }
+                        completePartnerReply(partnerId);
                         updateBadge(); saveState();
+                    } else {
+                        completePartnerReply(partnerId);
                     }
                 }, 1500);
             }
@@ -6243,29 +6266,28 @@ function hideProgressNote() {
     window.__autoMessageDueAt = Date.now() + delayMinutes * 60 * 1000;
     autoMsgTimer = setTimeout(runScheduledAutoMessage, delayMinutes * 60 * 1000);
 }
+let __autoMessageRunning = false;
 async function runScheduledAutoMessage() {
+    if (__autoMessageRunning) return;
+    __autoMessageRunning = true;
     autoMsgTimer = null;
-    if (!state.settings.autoMessageEnabled) return;
+    if (!state.settings.autoMessageEnabled) { __autoMessageRunning=false; return; }
     try {
-        var onlinePartners = state.partners.filter(p => p.online);
-        if (onlinePartners.length === 0) { scheduleAutoMessage(); return; }
-        var randomPartner = onlinePartners[Math.floor(Math.random() * onlinePartners.length)];
-        const replyContent = await generateReplyContent(randomPartner.id);
-        if (replyContent) {
-            const replyMsg = { sender: randomPartner.id, timestamp: Date.now(), ...replyContent };
-            const replyId = await saveMessageToDB(randomPartner.id, replyMsg);
-            replyMsg.id = replyId;
-            notifyBarkForPartnerMessage(randomPartner.id, replyMsg, 'partner_proactive');
-            if (randomPartner.id === state.currentPartnerId && chatLoader && chatLoader.partnerId === randomPartner.id) {
-                chatLoader.appendMessage(replyMsg);
-                clearUnread();
-            }
-            updateBadge();
-            saveState();
-            console.log('[MSG-PROACTIVE] saved', { partnerId: randomPartner.id, id: replyId });
-        }
-    } catch (e) { console.error('[MSG-PROACTIVE] failed:', e); }
-    scheduleAutoMessage();
+        console.log('[MSG-PROACTIVE] timer fired', {dueAt:window.__autoMessageDueAt||null, firedAt:Date.now(), hidden:document.hidden});
+        const onlinePartners=state.partners.filter(p=>p.online);
+        if (!onlinePartners.length) return;
+        const randomPartner=onlinePartners[Math.floor(Math.random()*onlinePartners.length)];
+        console.log('[MSG-PROACTIVE] selected',randomPartner.id);
+        const replyContent=await generateReplyContent(randomPartner.id);
+        if (!replyContent) return;
+        const replyMsg={sender:randomPartner.id,timestamp:Date.now(),...replyContent};
+        replyMsg.id=await saveMessageToDB(randomPartner.id,replyMsg);
+        console.log('[MSG-PROACTIVE] saved',{partnerId:randomPartner.id,id:replyMsg.id});
+        notifyBarkForPartnerMessage(randomPartner.id,replyMsg,'partner_proactive');
+        if(randomPartner.id===state.currentPartnerId && chatLoader && chatLoader.partnerId===randomPartner.id && !document.getElementById('chatScreen').classList.contains('hidden')) chatLoader.appendMessage(replyMsg);
+        await updateBadge(); saveState();
+    } catch(e) { console.error('[MSG-PROACTIVE] failed:',e); }
+    finally { __autoMessageRunning=false; scheduleAutoMessage(); }
 }
 
 function restartAutoMessage() {
@@ -7437,8 +7459,18 @@ class KeepAliveManager {
         restartAutoMessage();
         if (window.__autoMessageHeartbeat) clearInterval(window.__autoMessageHeartbeat);
         window.__autoMessageHeartbeat = setInterval(function() {
-            if (state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !autoMsgTimer) runScheduledAutoMessage();
-        }, 1000);
+            if (document.hidden) return;
+            if (state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !window.__autoMessageRunning) {
+                if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
+                runScheduledAutoMessage();
+            }
+        }, 10000);
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !window.__autoMessageRunning) {
+                if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
+                runScheduledAutoMessage();
+            }
+        });
 
         const todayStr = new Date().toDateString();
         if (state.stepsDate !== todayStr) {
