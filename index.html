@@ -2533,6 +2533,16 @@ html.dark-mode .inAppToast .toast-btn-secondary {
     }
 
     // ===================== 聊天加载器 =====================
+// 当前伴侣消息实时刷新：只刷新对应 ChatLoader，不改变当前伴侣状态
+async function refreshCurrentChatIfNeeded(partnerId) {
+    if (!chatLoader || !partnerId || state.currentPartnerId !== partnerId) return;
+    try {
+        await chatLoader._refreshFromDB();
+    } catch (e) {
+        console.error('实时刷新当前聊天失败:', e);
+    }
+}
+
     class ChatLoader {
         constructor(containerId, partnerId) {
             this.container = document.getElementById(containerId);
@@ -3515,6 +3525,8 @@ function getMergedReply() {
 
 // ===================== 模拟伴侣回复 =====================
 function simulateReply() {
+    const replyPartnerId = state.currentPartnerId;
+    window.__typingPartnerId = replyPartnerId;
     // 如果字卡库为空，不回复
     if (!state.wordCards || state.wordCards.length === 0) {
         return;
@@ -3543,8 +3555,8 @@ function simulateReply() {
             if (chatLoader) {
                 chatLoader.appendMessage(pokeMsg);
                 chatLoader.scrollToBottom();
-                saveMessageToDB(state.currentPartnerId, pokeMsg).then(function() {
-                    notifyBarkForPartnerMessage(state.currentPartnerId, pokeMsg, 'poke');
+                saveMessageToDB(replyPartnerId, pokeMsg).then(function() {
+                    notifyBarkForPartnerMessage(replyPartnerId, pokeMsg, 'poke');
                 }).catch(function(err) {
                     console.error('保存拍一拍消息失败:', err);
                 });
@@ -3555,16 +3567,16 @@ function simulateReply() {
             
             // 拍一拍后，可能再回复一条消息（增加互动感）
             setTimeout(async function() {
-                const replyContent = await generateReplyContent(state.currentPartnerId);
+                const replyContent = await generateReplyContent(replyPartnerId);
                 if (replyContent) {
                     const replyMsg = {
-                        sender: state.currentPartnerId,
+                        sender: replyPartnerId,
                         timestamp: Date.now(),
                         ...replyContent
                     };
-                    const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
+                    const replyId = await saveMessageToDB(replyPartnerId, replyMsg);
                     replyMsg.id = replyId;
-                    if (chatLoader) {
+                    if (state.currentPartnerId === replyPartnerId && chatLoader) {
                         chatLoader.appendMessage(replyMsg);
                         if (!document.getElementById('chatScreen').classList.contains('hidden')) {
                             clearUnread();
@@ -3582,6 +3594,7 @@ function simulateReply() {
     // ===== 显示「正在输入」指示器（修复版） =====
     function showTypingIndicator() {
         if (!state.settings.showTyping) return;
+        if (window.__typingPartnerId !== replyPartnerId) return;
         const tiWrapper = document.getElementById('typingIndicator');
         if (tiWrapper) {
             tiWrapper.style.display = 'block';
@@ -3621,16 +3634,16 @@ function simulateReply() {
         const delayRange = state.settings.maxReplyDelay - state.settings.minReplyDelay;
         delay += state.settings.minReplyDelay + Math.random() * delayRange;
         setTimeout(async function() {
-            const replyContent = await generateReplyContent(state.currentPartnerId);
+            const replyContent = await generateReplyContent(replyPartnerId);
             if (replyContent) {
                 const replyMsg = {
-                    sender: state.currentPartnerId,
+                    sender: replyPartnerId,
                     timestamp: Date.now(),
                     ...replyContent
                 };
-                const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
+                const replyId = await saveMessageToDB(replyPartnerId, replyMsg);
                 replyMsg.id = replyId;
-                if (state.currentPartnerId === state.currentPartnerId && chatLoader) {
+                if (state.currentPartnerId === replyPartnerId && chatLoader) {
                     chatLoader.appendMessage(replyMsg);
                     if (!document.getElementById('chatScreen').classList.contains('hidden')) {
                         clearUnread();
@@ -3641,8 +3654,9 @@ function simulateReply() {
             }
             if (i === replyCount - 1) {
                 const tiWrapper = document.getElementById('typingIndicator');
-                if (tiWrapper) {
+                if (tiWrapper && window.__typingPartnerId === replyPartnerId) {
                     tiWrapper.style.display = 'none';
+                    window.__typingPartnerId = null;
                 }
 // 在收到伴侣消息后调用
 checkAndSendAutoReply(state.currentPartnerId);
@@ -6424,6 +6438,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function triggerContinueSpeaking() {
     const partner = getCurrentPartner();
+    const replyPartnerId = partner ? partner.id : null;
+    window.__typingPartnerId = replyPartnerId;
     if (!partner) {
         showNote('没有找到伴侣', 'warning');
         return;
@@ -6462,18 +6478,18 @@ function triggerContinueSpeaking() {
         const delay = minDelay + Math.random() * (maxDelay - minDelay);
         
         setTimeout(async function() {
-            const replyContent = await generateReplyContent(state.currentPartnerId);
+            const replyContent = await generateReplyContent(replyPartnerId);
             
             if (replyContent) {
                 const replyMsg = {
-                    sender: state.currentPartnerId,
+                    sender: replyPartnerId,
                     timestamp: Date.now(),
                     ...replyContent
                 };
                 
-                const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
+                const replyId = await saveMessageToDB(replyPartnerId, replyMsg);
                 replyMsg.id = replyId;
-                if (state.currentPartnerId === state.currentPartnerId && chatLoader) {
+                if (state.currentPartnerId === replyPartnerId && chatLoader) {
                     chatLoader.appendMessage(replyMsg);
                     if (!document.getElementById('chatScreen').classList.contains('hidden')) {
                         clearUnread();
@@ -6486,8 +6502,9 @@ function triggerContinueSpeaking() {
             // ===== 最后一条消息发送完成后，隐藏「正在输入」 =====
             if (i === replyCount - 1) {
                 const tiWrapper = document.getElementById('typingIndicator');
-                if (tiWrapper) {
+                if (tiWrapper && window.__typingPartnerId === replyPartnerId) {
                     tiWrapper.style.display = 'none';
+                    window.__typingPartnerId = null;
                 }
             }
         }, delay + i * 500);
