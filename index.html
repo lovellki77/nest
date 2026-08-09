@@ -4142,6 +4142,12 @@ function renderPokeSettingsContent() {
             case 'back-to-settings-main': renderSettingsMain(); break;
             case 'toggle':
                 var toggleEl = target.closest('.toggle') || target;
+                // iOS/iPad 触摸兜底：touchend 已处理的 Bark 开关不再重复响应后续 click。
+                if ((toggleEl.id === 'barkSendOnPartnerToggle' || toggleEl.id === 'barkSendOnReminderToggle') &&
+                    toggleEl.getAttribute('data-touch-handled') === '1') {
+                    toggleEl.removeAttribute('data-touch-handled');
+                    break;
+                }
                 toggleEl.classList.toggle('active');
                 var key = toggleEl.getAttribute('data-key');
                 var enabled = toggleEl.classList.contains('active');
@@ -4230,6 +4236,24 @@ case 'batch-add-pokes': batchAddPokes(); break;
 case 'clear-pokes': clearAllPokes(); break;
         }
     });
+
+    // Bark 开关 iOS/iPad 触摸兜底：仅处理这两个开关，不影响其他设置项。
+    document.getElementById('settingsScreen').addEventListener('touchend', function(e) {
+        const el = e.target && e.target.closest ? e.target.closest('#barkSendOnPartnerToggle, #barkSendOnReminderToggle') : null;
+        if (!el) return;
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.toggle('active');
+        const key = el.getAttribute('data-key');
+        const enabled = el.classList.contains('active');
+        if (!state.settings) state.settings = {};
+        if (!state.settings.bark) state.settings.bark = {};
+        state.settings.bark[key] = enabled;
+        el.setAttribute('aria-checked', enabled ? 'true' : 'false');
+        el.setAttribute('data-touch-handled', '1');
+        saveState();
+        console.log('[Bark] 触摸开关已更新:', key, enabled);
+    }, { passive: false });
 
     // Bark 开关键盘/辅助功能支持：Enter / Space 与点击行为一致。
     document.getElementById('settingsScreen').addEventListener('keydown', function(e) {
