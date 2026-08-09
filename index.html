@@ -3564,7 +3564,6 @@ function simulateReply() {
                     };
                     const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
                     replyMsg.id = replyId;
-                    notifyBarkForPartnerMessage(state.currentPartnerId, replyMsg, 'partner_proactive');
                     if (chatLoader) {
                         chatLoader.appendMessage(replyMsg);
                         if (!document.getElementById('chatScreen').classList.contains('hidden')) {
@@ -3631,7 +3630,6 @@ function simulateReply() {
                 };
                 const replyId = await saveMessageToDB(state.currentPartnerId, replyMsg);
                 replyMsg.id = replyId;
-                notifyBarkForPartnerMessage(state.currentPartnerId, replyMsg, 'partner_proactive');
                 if (state.currentPartnerId === state.currentPartnerId && chatLoader) {
                     chatLoader.appendMessage(replyMsg);
                     if (!document.getElementById('chatScreen').classList.contains('hidden')) {
@@ -3788,6 +3786,7 @@ checkAndSendAutoReply(state.currentPartnerId);
                             const replyMsg = { sender: partnerId, timestamp: Date.now(), ...replyContent };
                             const replyId = await saveMessageToDB(partnerId, replyMsg);
                             replyMsg.id = replyId;
+                            notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                             if (state.currentPartnerId === partnerId && chatLoader) {
                                 if (idx === count - 1) document.getElementById('typingIndicator').style.display = 'none';
                                 chatLoader.appendMessage(replyMsg);
@@ -6203,6 +6202,8 @@ function hideProgressNote() {
             const replyMsg = { sender: randomPartner.id, timestamp: Date.now(), ...replyContent };
             const replyId = await saveMessageToDB(randomPartner.id, replyMsg);
             replyMsg.id = replyId;
+            // 自动消息属于“对方主动消息”，后台时允许 Bark 推送
+            notifyBarkForPartnerMessage(randomPartner.id, replyMsg, 'partner_proactive');
 
             if (randomPartner.id === state.currentPartnerId && chatLoader) {
                 chatLoader.appendMessage(replyMsg);
@@ -7065,7 +7066,18 @@ async function notifyBarkForPartnerMessage(partnerId, replyMsg, source) {
         // poke = 对方拍一拍
         // continue_speaking / auto_reply 等来源不进入此出口。
         const allowedSources = ['user_reply', 'partner_proactive', 'poke'];
-        if (!replyMsg || !document.hidden || !allowedSources.includes(source)) return;
+        if (!replyMsg) {
+            console.log('[Bark] 消息推送跳过：replyMsg 为空');
+            return;
+        }
+        if (!allowedSources.includes(source)) {
+            console.log('[Bark] 消息推送跳过：来源不允许', source);
+            return;
+        }
+        if (!document.hidden) {
+            console.log('[Bark] 消息推送跳过：当前页面在前台', source);
+            return;
+        }
 
         // 普通对方回复必须确认 sender；拍一拍是 system 消息，因此单独允许。
         if (source !== 'poke' && replyMsg.sender !== partnerId) return;
@@ -7078,6 +7090,7 @@ async function notifyBarkForPartnerMessage(partnerId, replyMsg, source) {
         }
 
         const settings = (typeof state !== 'undefined' && state.settings && state.settings.bark) ? state.settings.bark : {};
+        console.log('[Bark] 消息推送判定:', { source, hidden: document.hidden, enabled: settings.sendOnPartnerReply, configured: manager.bark.isConfigured() });
         if (settings.sendOnPartnerReply === false) {
             console.log('[Bark] 对方消息推送：已关闭，跳过');
             return;
@@ -7563,7 +7576,9 @@ function sendPokeMessage(pokeText, partner) {
         };
         chatLoader.appendMessage(systemMsg);
         chatLoader.scrollToBottom();
-        saveMessageToDB(state.currentPartnerId, systemMsg).catch(function(err) {
+        saveMessageToDB(state.currentPartnerId, systemMsg).then(function() {
+            notifyBarkForPartnerMessage(state.currentPartnerId, systemMsg, 'poke');
+        }).catch(function(err) {
             console.error('保存拍一拍消息失败:', err);
         });
     } else {
