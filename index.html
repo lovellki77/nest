@@ -1291,6 +1291,129 @@
     transition: var(--transition);
 }
 .auto-reply-item .del-btn:hover { color: var(--danger); }
+
+/* ========================================================== */
+/* 应用内消息弹窗样式                                          */
+/* ========================================================== */
+
+#inAppMessageContainer {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    width: 90%;
+    max-width: 400px;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+}
+
+.inAppToast {
+    pointer-events: auto;
+    background: var(--bg-secondary, #ffffff);
+    border-radius: 16px;
+    padding: 16px 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    width: 100%;
+    animation: toastSlideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    position: relative;
+}
+
+html.dark-mode .inAppToast {
+    background: var(--bg-secondary, #24242a);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.inAppToast .toast-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary, #1a1a1a);
+    margin-bottom: 4px;
+}
+
+.inAppToast .toast-message {
+    font-size: 13px;
+    color: var(--text-secondary, #666);
+    line-height: 1.5;
+}
+
+.inAppToast .toast-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 10px;
+}
+
+.inAppToast .toast-close {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: var(--text-muted, #999);
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.inAppToast .toast-btn {
+    padding: 6px 16px;
+    border-radius: 8px;
+    border: none;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: var(--font-family);
+}
+
+.inAppToast .toast-btn-primary {
+    background: var(--accent-bg, rgba(197, 164, 126, 0.15));
+    color: var(--accent-dark, #8b6f5c);
+}
+
+.inAppToast .toast-btn-primary:hover {
+    background: var(--accent-bg-hover, rgba(197, 164, 126, 0.3));
+}
+
+.inAppToast .toast-btn-secondary {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-secondary, #666);
+}
+
+html.dark-mode .inAppToast .toast-btn-secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary, #aaa);
+}
+
+@keyframes toastSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes toastSlideDown {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.95);
+    }
+}
     </style>
 <!-- ========================================================== -->
     <!-- Favicon & PWA 配置（2026-07-21 更新） -->
@@ -2050,12 +2173,13 @@
         }
 
         appendMessage(message) {
-            this.allMessages.push(message);
-            const el = this.createMessageElement(message);
-            this.container.appendChild(el);
-            this.scrollToBottom();
-            this._setCache(this.allMessages);
-        }
+    this.allMessages.push(message);
+    const el = this.createMessageElement(message);
+    this.container.appendChild(el);
+    // 延迟滚动，给图片加载留时间
+    setTimeout(() => this.scrollToBottom(), 150);
+    this._setCache(this.allMessages);
+}
 
         formatMessageTime(ts) {
             const d = new Date(ts);
@@ -2098,15 +2222,20 @@ if (!isMine && !isSystem) {
     if (msg.quote && msg.quote.text) {
         quoteHtml = `<div class="quote-block"><div class="quote-sender"><i class="fa-solid fa-reply" style="font-size:10px; margin-right:4px; color:var(--accent-dark);"></i>${escapeHTML(msg.quote.sender)}</div><div>${escapeHTML(msg.quote.text)}</div></div>`;
     }
-    let content = quoteHtml;
-    let hasImage = false;
-    if (msg.image) {
-        hasImage = true;
-        content += `<img src="${msg.image}" style="max-width:150px;border-radius:8px;margin-bottom:4px;" onclick="previewImage('${msg.image}')" loading="lazy">`;
-        if (!msg.text && !msg.quote) {
-            content += `<br>`;
-        }
+    // ===== 方案二：使用 DOM 元素渲染图片 =====
+let content = quoteHtml;
+let hasImage = false;
+let imageElement = null;
+
+if (msg.image) {
+    hasImage = true;
+    // 不直接拼接字符串，而是先存起来，后面用 DOM 方式添加
+    // 这里先用字符串占位，后续用 DOM 替换
+    content += `<span class="image-placeholder" data-src="${msg.image}"></span>`;
+    if (!msg.text && !msg.quote) {
+        content += `<br>`;
     }
+}
     if (msg.text) {
         if (isSystem) content += `<span style="color:#999;font-size:12px;">${escapeHTML(msg.text)}</span>`;
         else content += escapeHTML(msg.text).replace(/\n/g, '<br>');
@@ -2145,6 +2274,28 @@ div.innerHTML = `
         ${isMine && !isSystem ? myAvatarHtml : ''}
     </div>
 `;
+// ===== 方案二：替换图片占位为 DOM 元素，并监听加载完成 =====
+const placeholder = div.querySelector('.image-placeholder');
+if (placeholder) {
+    const img = document.createElement('img');
+    img.src = placeholder.dataset.src;
+    img.style.maxWidth = '150px';
+    img.style.borderRadius = '8px';
+    img.style.marginBottom = '4px';
+    img.onclick = function() {
+        previewImage(this.src);
+    };
+    img.onload = function() {
+        // 图片加载完成后，重新滚动到底部
+        if (this.closest('.chat-container') || this.closest('#chatMessages')) {
+            const container = this.closest('#chatMessages') || document.getElementById('chatMessages');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+    };
+    placeholder.parentNode.replaceChild(img, placeholder);
+}
     
     if (!isMine && !isSystem) {
         const avatarEl = div.querySelector('.avatar');
@@ -3445,8 +3596,84 @@ window.clearAllPokes = function() {
         html += '</div>';
         html += '<button class="primary-btn" data-action="save-tab-names" style="margin-top:16px;width:100%;">保存标签名称</button>';
         html += '</div>';
+    // 在返回之前，添加 Bark 设置卡片
+    html += renderBarkSettings();
         return html;
     }
+
+// Bark 推送设置（添加到设置页面）
+function renderBarkSettings() {
+    const status = typeof getBarkStatus === 'function' ? getBarkStatus() : { isConfigured: false };
+    const key = typeof getBarkKey === 'function' ? getBarkKey() : '';
+    const maskedKey = key ? key.substring(0, 8) + '...' + key.substring(key.length - 4) : '未设置';
+
+    return `
+        <div class="card" style="margin-top:12px;">
+            <div class="settings-section-title" style="margin-bottom:12px;">
+                <i class="fa-regular fa-bell"></i> Bark 推送设置
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6;">
+                需要先在 App Store 下载 <strong>Bark</strong> 应用，复制其中的推送 Key 填入下方。
+                <br>支持 iOS 13.0+，即使页面在后台也能收到通知 💕
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:13px;font-weight:500;flex-shrink:0;">Bark Key：</span>
+                    <input type="text" id="barkKeyInput" placeholder="粘贴你的 Bark Key" 
+                           value="${key || ''}" 
+                           style="flex:1;padding:8px 12px;border-radius:10px;border:1px solid var(--border-light);background:var(--bg-input);font-size:13px;">
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="primary-btn" onclick="saveBarkKeyFromUI()" style="flex:1;padding:8px 0;font-size:13px;">
+                        <i class="fa-solid fa-save"></i> 保存
+                    </button>
+                    <button class="primary-btn" onclick="testBarkPushFromUI()" style="flex:1;padding:8px 0;font-size:13px;border-color:rgba(197,164,126,0.3);">
+                        <i class="fa-solid fa-paper-plane"></i> 测试
+                    </button>
+                </div>
+                <div id="barkStatusDisplay" style="font-size:12px;color:${status.isConfigured ? 'var(--online)' : 'var(--text-muted)'};">
+                    ${status.isConfigured ? '✅ 已绑定：' + maskedKey : '❌ 未绑定'}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// 保存 Bark Key 的 UI 函数
+window.saveBarkKeyFromUI = function() {
+    const input = document.getElementById('barkKeyInput');
+    if (!input) return;
+    
+    const key = input.value.trim();
+    if (!key) {
+        showNote('请输入 Bark Key', 'warning');
+        return;
+    }
+    
+    if (typeof setBarkKey === 'function') {
+        const success = setBarkKey(key);
+        if (success) {
+            const statusEl = document.getElementById('barkStatusDisplay');
+            if (statusEl) {
+                const masked = key.substring(0, 8) + '...' + key.substring(key.length - 4);
+                statusEl.textContent = '✅ 已绑定：' + masked;
+                statusEl.style.color = 'var(--online)';
+            }
+            showNote('Bark Key 已保存 ✅', 'success');
+        } else {
+            showNote('Key 无效，请检查', 'error');
+        }
+    }
+};
+
+// 测试 Bark 推送的 UI 函数
+window.testBarkPushFromUI = function() {
+    if (typeof testPush === 'function') {
+        testPush();
+    } else {
+        showNote('测试功能不可用', 'warning');
+    }
+};
 
     function renderChatSettings() {
         var s = state.settings;
@@ -5540,6 +5767,631 @@ async function checkAndSendAutoReply(partnerId) {
         }
     }, delay);
 }
+
+// ==========================================================
+// 音频保活 + Bark 推送 + 应用内弹窗 完整实现
+// ==========================================================
+
+(function() {
+    'use strict';
+
+    // ==========================================================
+    // 1. 应用内弹窗（纯前端）
+    // ==========================================================
+
+    class InAppMessage {
+        constructor() {
+            this.container = null;
+            this.isShowing = false;
+            this.queue = [];
+            this._initialized = false;
+        }
+
+        init() {
+            if (this._initialized) return;
+            
+            this.container = document.createElement('div');
+            this.container.id = 'inAppMessageContainer';
+            document.body.appendChild(this.container);
+            this._initialized = true;
+        }
+
+        show(options) {
+            const {
+                title = '💬 新消息',
+                message = '',
+                duration = 4000,
+                actions = [],
+                onClose = null,
+                type = 'info'
+            } = options;
+
+            if (this.isShowing) {
+                this.queue.push({ options });
+                return;
+            }
+
+            this.isShowing = true;
+
+            const toast = document.createElement('div');
+            toast.className = 'inAppToast';
+            
+            const colors = {
+                info: '#4A90D9',
+                success: '#27AE60',
+                warning: '#F39C12',
+                error: '#E74C3C'
+            };
+            toast.style.borderLeft = `4px solid ${colors[type] || colors.info}`;
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'toast-title';
+            titleEl.textContent = title;
+            toast.appendChild(titleEl);
+
+            if (message) {
+                const msgEl = document.createElement('div');
+                msgEl.className = 'toast-message';
+                msgEl.textContent = message;
+                toast.appendChild(msgEl);
+            }
+
+            if (actions.length > 0) {
+                const btnContainer = document.createElement('div');
+                btnContainer.className = 'toast-actions';
+                actions.forEach(action => {
+                    const btn = document.createElement('button');
+                    btn.className = `toast-btn ${action.primary ? 'toast-btn-primary' : 'toast-btn-secondary'}`;
+                    btn.textContent = action.label;
+                    btn.onclick = () => {
+                        this.hide(toast);
+                        if (action.onClick) action.onClick();
+                    };
+                    btnContainer.appendChild(btn);
+                });
+                toast.appendChild(btnContainer);
+            }
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'toast-close';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => this.hide(toast);
+            toast.appendChild(closeBtn);
+
+            this.container.appendChild(toast);
+
+            if (duration > 0) {
+                setTimeout(() => this.hide(toast), duration);
+            }
+        }
+
+        hide(toast) {
+            if (!toast || !toast.parentNode) return;
+            toast.style.animation = 'toastSlideDown 0.3s ease-in forwards';
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+                this.isShowing = false;
+                if (this.queue.length > 0) {
+                    const next = this.queue.shift();
+                    this.show(next.options);
+                }
+            }, 300);
+        }
+
+        info(title, message, duration = 3000) {
+            this.show({ title, message, duration, type: 'info' });
+        }
+        success(title, message, duration = 3000) {
+            this.show({ title, message, duration, type: 'success' });
+        }
+        warning(title, message, duration = 3000) {
+            this.show({ title, message, duration, type: 'warning' });
+        }
+        error(title, message, duration = 3000) {
+            this.show({ title, message, duration, type: 'error' });
+        }
+        confirm(title, message, onConfirm, onCancel = null) {
+            this.show({
+                title,
+                message,
+                duration: 0,
+                type: 'info',
+                actions: [
+                    { label: '取消', onClick: onCancel || (() => {}) },
+                    { label: '确定', onClick: onConfirm, primary: true }
+                ]
+            });
+        }
+    }
+
+    // ==========================================================
+    // 2. Bark 推送管理器
+    // ==========================================================
+
+    class BarkManager {
+        constructor() {
+            this.apiBase = 'https://api.day.app';
+            this.userKey = null;
+            this.isEnabled = false;
+        }
+
+        setKey(key) {
+            if (!key || key.trim().length < 10) {
+                console.warn('[Bark] Key 无效');
+                return false;
+            }
+            this.userKey = key.trim();
+            this.isEnabled = true;
+            try {
+                localStorage.setItem('bark_key', this.userKey);
+            } catch(e) {}
+            console.log('[Bark] Key 已设置');
+            return true;
+        }
+
+        loadKey() {
+            try {
+                const saved = localStorage.getItem('bark_key');
+                if (saved) {
+                    this.userKey = saved;
+                    this.isEnabled = true;
+                    console.log('[Bark] 已加载保存的 Key');
+                    return true;
+                }
+            } catch(e) {}
+            return false;
+        }
+
+        getKey() {
+            return this.userKey;
+        }
+
+        isConfigured() {
+            return this.isEnabled && this.userKey && this.userKey.length > 0;
+        }
+
+        async send(title, message, url = '/nest/') {
+            if (!this.isConfigured()) {
+                console.warn('[Bark] 未配置 Key，无法发送推送');
+                return { success: false, error: '未配置 Key' };
+            }
+
+            try {
+                let apiUrl = `${this.apiBase}/${this.userKey}`;
+                if (title) apiUrl += `/${encodeURIComponent(title)}`;
+                if (message) apiUrl += `/${encodeURIComponent(message)}`;
+                if (url) apiUrl += `?url=${encodeURIComponent(url)}`;
+
+                console.log('[Bark] 发送推送:', apiUrl);
+
+                const response = await fetch(apiUrl);
+                const result = await response.json();
+                
+                if (result.code === 200) {
+                    console.log('[Bark] ✅ 推送发送成功');
+                    return { success: true, data: result };
+                } else {
+                    console.warn('[Bark] 推送发送失败:', result);
+                    return { success: false, error: result.message || '未知错误' };
+                }
+            } catch (err) {
+                console.error('[Bark] 推送发送异常:', err);
+                return { success: false, error: err.message };
+            }
+        }
+
+        async notifyNewMessage(partnerName, messageText, url = '/nest/') {
+            const title = `💕 ${partnerName || '对方'}`;
+            const body = messageText || '给你发了一条新消息 ✨';
+            return this.send(title, body, url);
+        }
+
+        async notifyReminder() {
+            return this.send(
+                '💭 有人在等你',
+                '你已经离开一会儿了，梦角还在陪着你呢 💕',
+                '/nest/'
+            );
+        }
+
+        async test() {
+            return this.send('✅ Bark 测试', '推送连接成功！', '/nest/');
+        }
+    }
+
+    // ==========================================================
+    // 3. Web Audio 音频保活
+    // ==========================================================
+
+    class AudioKeepAlive {
+        constructor() {
+            this.ctx = null;
+            this.isPlaying = false;
+            this.source = null;
+            this.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            this.isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            this.retryCount = 0;
+            this.maxRetries = 10;
+            this.isInitialized = false;
+            this._timer = null;
+            this._resumeHandler = null;
+        }
+
+        createSilentBuffer() {
+            const sampleRate = 44100;
+            const bufferSize = Math.floor(sampleRate * 0.1);
+            const buffer = this.ctx.createBuffer(1, bufferSize, sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < data.length; i++) {
+                data[i] = 0;
+            }
+            return buffer;
+        }
+
+        playSilent() {
+            if (!this.ctx || this.ctx.state === 'closed') return;
+
+            try {
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume().catch(() => {});
+                    return;
+                }
+
+                const source = this.ctx.createBufferSource();
+                source.buffer = this.createSilentBuffer();
+                source.connect(this.ctx.destination);
+                source.start(0);
+                
+                this.source = source;
+                this.isPlaying = true;
+                this.retryCount = 0;
+
+                source.onended = () => {
+                    if (this.isPlaying && this.ctx && this.ctx.state !== 'closed') {
+                        if (this._timer) clearTimeout(this._timer);
+                        this._timer = setTimeout(() => this.playSilent(), 100);
+                    }
+                };
+
+                console.log('[AudioKeepAlive] 静音音频播放中');
+            } catch (err) {
+                console.warn('[AudioKeepAlive] 播放失败:', err.message);
+                this.retryCount++;
+                if (this.retryCount < this.maxRetries) {
+                    setTimeout(() => this.playSilent(), 1000 * this.retryCount);
+                }
+            }
+        }
+
+        init() {
+            if (this.isInitialized) return;
+
+            if (!this.isIOS || !this.isSafari) {
+                console.log('[AudioKeepAlive] 非 iOS Safari，跳过');
+                return;
+            }
+
+            try {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+                if (this.ctx.state === 'suspended') {
+                    const resumeOnInteraction = () => {
+                        this.ctx.resume().then(() => {
+                            this.playSilent();
+                        }).catch(() => {});
+                        document.removeEventListener('click', resumeOnInteraction);
+                        document.removeEventListener('touchstart', resumeOnInteraction);
+                        document.removeEventListener('keydown', resumeOnInteraction);
+                    };
+                    this._resumeHandler = resumeOnInteraction;
+                    document.addEventListener('click', resumeOnInteraction);
+                    document.addEventListener('touchstart', resumeOnInteraction);
+                    document.addEventListener('keydown', resumeOnInteraction);
+
+                    setTimeout(() => {
+                        if (this.ctx && this.ctx.state === 'suspended') {
+                            this.ctx.resume().catch(() => {});
+                        }
+                    }, 5000);
+                } else {
+                    this.playSilent();
+                }
+
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden && this.ctx && this.ctx.state === 'suspended') {
+                        this.ctx.resume().catch(() => {});
+                        setTimeout(() => this.playSilent(), 500);
+                    }
+                    if (document.hidden && this.ctx && this.ctx.state === 'running') {
+                        this.playSilent();
+                    }
+                });
+
+                this.isInitialized = true;
+                console.log('[AudioKeepAlive] 初始化成功');
+            } catch (err) {
+                console.warn('[AudioKeepAlive] 初始化失败:', err.message);
+            }
+        }
+
+        stop() {
+            this.isPlaying = false;
+            if (this._timer) {
+                clearTimeout(this._timer);
+                this._timer = null;
+            }
+            if (this.source) {
+                try { this.source.stop(); } catch(e) {}
+                this.source = null;
+            }
+            if (this.ctx && this.ctx.state !== 'closed') {
+                this.ctx.close().catch(() => {});
+            }
+            if (this._resumeHandler) {
+                document.removeEventListener('click', this._resumeHandler);
+                document.removeEventListener('touchstart', this._resumeHandler);
+                document.removeEventListener('keydown', this._resumeHandler);
+                this._resumeHandler = null;
+            }
+        }
+
+        getStatus() {
+            return {
+                isPlaying: this.isPlaying,
+                ctxState: this.ctx ? this.ctx.state : 'none',
+                isIOS: this.isIOS,
+                isInitialized: this.isInitialized
+            };
+        }
+    }
+
+    // ==========================================================
+    // 4. 组合管理器
+    // ==========================================================
+
+    class KeepAliveManager {
+        constructor() {
+            this.audio = new AudioKeepAlive();
+            this.bark = new BarkManager();
+            this.inApp = new InAppMessage();
+            this.isStarted = false;
+            this.reminderTimer = null;
+            this.backgroundStartTime = null;
+            this.isHidden = false;
+            this.notificationShown = false;
+            this._checkInterval = null;
+            this._hasIntercepted = false;
+        }
+
+        async start() {
+            if (this.isStarted) return;
+            console.log('[KeepAlive] 启动组合保活...');
+
+            this.inApp.init();
+            this.bark.loadKey();
+            this.audio.init();
+            this.setupVisibilityListener();
+            this.setupTimers();
+            this.setupMessageInterceptor();
+
+            this.isStarted = true;
+            console.log('[KeepAlive] 组合保活已启动');
+            console.log('[KeepAlive] Bark 状态:', this.bark.isConfigured() ? '✅ 已配置' : '❌ 未配置');
+        }
+
+        setupVisibilityListener() {
+            document.addEventListener('visibilitychange', () => {
+                this.isHidden = document.hidden;
+                
+                if (this.isHidden) {
+                    this.backgroundStartTime = Date.now();
+                    this.notificationShown = false;
+                    console.log('[KeepAlive] 页面进入后台');
+                } else {
+                    console.log('[KeepAlive] 页面回到前台');
+                    if (this.reminderTimer) {
+                        clearTimeout(this.reminderTimer);
+                        this.reminderTimer = null;
+                    }
+                }
+            });
+        }
+
+        setupTimers() {
+            if (this._checkInterval) {
+                clearInterval(this._checkInterval);
+            }
+            this._checkInterval = setInterval(() => {
+                if (this.isHidden && this.bark.isConfigured()) {
+                    const duration = (Date.now() - this.backgroundStartTime) / 1000;
+                    
+                    if (duration > 120 && !this.notificationShown) {
+                        this.notificationShown = true;
+                        this.bark.notifyReminder();
+                        console.log('[KeepAlive] 发送后台提醒');
+                    }
+                }
+            }, 30000);
+        }
+
+        setupMessageInterceptor() {
+            if (this._hasIntercepted) return;
+            this._hasIntercepted = true;
+
+            // 保存原始函数引用
+            const _this = this;
+
+            // 拦截 window.sendMessage（用户发送消息时触发推送）
+            const originalSendMessage = window.sendMessage;
+            if (originalSendMessage) {
+                window.sendMessage = async function() {
+                    // 调用原始函数
+                    const result = originalSendMessage.apply(this, arguments);
+                    
+                    // 如果页面在后台且 Bark 已配置，发送推送
+                    if (document.hidden && _this.bark.isConfigured()) {
+                        try {
+                            const partner = typeof getCurrentPartner === 'function' ? getCurrentPartner() : null;
+                            const name = partner ? partner.name : '对方';
+                            
+                            const messages = chatLoader ? chatLoader.allMessages : [];
+                            const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+                            const text = lastMsg && lastMsg.text ? lastMsg.text : '发了一条新消息';
+                            
+                            await _this.bark.notifyNewMessage(name, text);
+                        } catch (e) {
+                            console.warn('[Bark] 推送发送失败:', e);
+                        }
+                    }
+                    
+                    return result;
+                };
+            }
+
+            // 拦截 simulateReply（对方回复时触发推送）
+            const originalSimulateReply = window.simulateReply;
+            if (originalSimulateReply) {
+                window.simulateReply = async function() {
+                    // 调用原始函数
+                    const result = originalSimulateReply.apply(this, arguments);
+                    
+                    // 如果页面在后台且 Bark 已配置，发送推送
+                    if (document.hidden && _this.bark.isConfigured()) {
+                        try {
+                            const partner = typeof getCurrentPartner === 'function' ? getCurrentPartner() : null;
+                            const name = partner ? partner.name : '对方';
+                            
+                            const messages = chatLoader ? chatLoader.allMessages : [];
+                            const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+                            const text = lastMsg && lastMsg.text ? lastMsg.text : '给你发了一条新消息 ✨';
+                            
+                            await _this.bark.notifyNewMessage(name, text);
+                        } catch (e) {
+                            console.warn('[Bark] 推送发送失败:', e);
+                        }
+                    }
+                    
+                    return result;
+                };
+            }
+
+            // 拦截 sendEmoji（发送表情时触发推送）
+            const originalSendEmoji = window.sendEmoji;
+            if (originalSendEmoji) {
+                window.sendEmoji = async function(imageData) {
+                    const result = originalSendEmoji.apply(this, arguments);
+                    
+                    if (document.hidden && _this.bark.isConfigured()) {
+                        try {
+                            const partner = typeof getCurrentPartner === 'function' ? getCurrentPartner() : null;
+                            const name = partner ? partner.name : '对方';
+                            await _this.bark.notifyNewMessage(name, '发了一个表情 💕');
+                        } catch (e) {
+                            console.warn('[Bark] 推送发送失败:', e);
+                        }
+                    }
+                    
+                    return result;
+                };
+            }
+        }
+
+        setBarkKey(key) {
+            const success = this.bark.setKey(key);
+            if (success) {
+                setTimeout(() => {
+                    this.bark.test();
+                }, 500);
+                if (this.inApp) {
+                    this.inApp.success('✅ Bark 已绑定', '测试推送已发送，请查看手机通知');
+                }
+            } else {
+                if (this.inApp) {
+                    this.inApp.error('❌ Key 无效', '请检查 Bark Key 是否正确');
+                }
+            }
+            return success;
+        }
+
+        getBarkStatus() {
+            return {
+                isConfigured: this.bark.isConfigured(),
+                key: this.bark.getKey() ? '已设置' : '未设置'
+            };
+        }
+
+        getBarkKey() {
+            return this.bark.getKey();
+        }
+
+        async testPush() {
+            if (!this.bark.isConfigured()) {
+                if (this.inApp) {
+                    this.inApp.warning('⚠️ 未绑定', '请先在设置中绑定 Bark Key');
+                }
+                return false;
+            }
+            const result = await this.bark.test();
+            if (result.success && this.inApp) {
+                this.inApp.success('✅ 测试成功', '推送已发送，请查看手机通知');
+            } else if (this.inApp) {
+                this.inApp.error('❌ 测试失败', result.error || '请检查网络和 Key');
+            }
+            return result.success;
+        }
+
+        getStatus() {
+            return {
+                isStarted: this.isStarted,
+                isHidden: this.isHidden,
+                audio: this.audio.getStatus(),
+                bark: this.getBarkStatus()
+            };
+        }
+
+        // 清理资源
+        destroy() {
+            if (this._checkInterval) {
+                clearInterval(this._checkInterval);
+                this._checkInterval = null;
+            }
+            if (this.reminderTimer) {
+                clearTimeout(this.reminderTimer);
+                this.reminderTimer = null;
+            }
+            this.audio.stop();
+            this.isStarted = false;
+        }
+    }
+
+    // ==========================================================
+    // 5. 创建实例并暴露全局
+    // ==========================================================
+
+    const keepAliveManager = new KeepAliveManager();
+
+    window.keepAliveManager = keepAliveManager;
+    window.startKeepAlive = function() {
+        keepAliveManager.start();
+    };
+    window.setBarkKey = function(key) {
+        return keepAliveManager.setBarkKey(key);
+    };
+    window.getBarkStatus = function() {
+        return keepAliveManager.getBarkStatus();
+    };
+    window.getBarkKey = function() {
+        return keepAliveManager.getBarkKey();
+    };
+    window.testPush = function() {
+        return keepAliveManager.testPush();
+    };
+    window.getKeepAliveStatus = function() {
+        return keepAliveManager.getStatus();
+    };
+
+    console.log('[KeepAlive] 模块已加载');
+})();
     // ===================== 初始化 =====================
     async function init() {
         state = loadState();
@@ -5577,6 +6429,16 @@ async function checkAndSendAutoReply(partnerId) {
         saveState();
         applyDarkMode(state.settings.darkMode);
         switchScreen('main');
+
+    // 新增：启动 Bark + 音频保活
+    // 延迟 3 秒启动，确保其他资源加载完成
+    setTimeout(function() {
+        if (typeof keepAliveManager !== 'undefined' && keepAliveManager.start) {
+            keepAliveManager.start();
+            console.log('[Init] 保活已启动');
+        }
+    }, 3000);
+
         if (!stampAnimated) setTimeout(() => { var el = document.getElementById('stampElement'); if (el) { el.classList.add('animate'); stampAnimated = true; } }, 500);
         updateBadge();
         fetchAndUpdateWeather();
