@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
     <title>梦语</title>
-<!-- v6：主动消息保持上一版正常调度，保留10秒前台兜底；输入状态与未读同步优化 -->
+<!-- v6：干净事件驱动；主动消息保留10秒前台兜底；无5秒ChatSync -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
@@ -3162,9 +3162,9 @@ if (!newState.settings.autoReply) {
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
         var nav = document.querySelector('[data-screen="'+name+'"]');
         if (nav) nav.classList.add('active');
-        if (name === 'main') { stopChatSync(); renderMain(); }
+        if (name === 'main') {  renderMain(); }
         if (name === 'chat') { renderChat(); clearUnread(); }
-        if (name === 'settings') { stopChatSync(); renderSettingsMain(); }
+        if (name === 'settings') {  renderSettingsMain(); }
         // 导航切换本身也必须刷新未读徽标，不能依赖再次进入聊天页。
         setTimeout(updateBadge, 0);
         setTimeout(updateBadge, 250);
@@ -3474,7 +3474,7 @@ if (!newState.settings.autoReply) {
         chatLoader.init().then(() => {
             if (renderVersion !== currentVersion) return;
             chatInitialized = true;
-            startChatSync();
+            
             document.getElementById('chatInput').value = '';
             updateCharCount();
             clearUnread();
@@ -3588,33 +3588,9 @@ function completePartnerReply(partnerId) {
     updateBadge();
 }
 
-// 当前聊天实时同步：以 IndexedDB 为最终事实来源，避免 Safari/PWA 中直接 append 的生命周期差异。
-let chatSyncTimer = null;
-async function syncCurrentChatFromDB() {
-    try {
-        if (!chatLoader || chatLoader.isDestroyed) return;
-        const partnerId = state.currentPartnerId;
-        if (!partnerId || chatLoader.partnerId !== partnerId) return;
-        await chatLoader._refreshFromDB();
-        updateBadge();
-        renderTypingPartners();
-    } catch (e) { console.warn('[ChatSync] 刷新失败:', e); }
-}
-function startChatSync() {
-    if (chatSyncTimer) clearInterval(chatSyncTimer);
-    chatSyncTimer = setInterval(() => { if (!document.hidden) syncCurrentChatFromDB(); }, 5000);
-    setTimeout(syncCurrentChatFromDB, 150);
-}
-function stopChatSync() {
-    if (chatSyncTimer) { clearInterval(chatSyncTimer); chatSyncTimer = null; }
-}
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        stopChatSync();
-    } else {
-        startChatSync();
-    }
-});
+// 当前版本采用纯事件驱动聊天更新：
+// 不再使用 5 秒 ChatSync 轮询。消息生成后直接更新当前聊天，
+// IndexedDB 只负责持久化；这样避免轮询与消息写入/渲染产生竞争。
 
 // ===================== 模拟伴侣回复 =====================
 function simulateReply() {
