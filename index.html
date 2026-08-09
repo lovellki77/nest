@@ -3563,51 +3563,56 @@ window.clearAllPokes = function() {
 
     // ========== 外观美化 ==========
     function renderAppearanceSettings() {
-        var html = '<div class="card">';
-        html += '<div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-stamp"></i> 自定义印章</div>';
-        html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6;">上传透明底 PNG 图片作为主页收据卡片的个性化印章。</div>';
-        html += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">';
-        html += '<div style="width:80px;height:80px;border-radius:8px;border:1px dashed var(--border-light);display:flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(0,0,0,0.02);">';
-        if (state.customStamp) {
-            html += '<img src="'+state.customStamp+'" style="max-width:100%;max-height:100%;object-fit:contain;">';
-        } else {
-            html += '<span style="font-size:11px;color:var(--text-muted);">未设置</span>';
-        }
-        html += '</div>';
-        html += '<div style="flex:1;">';
-        html += '<div style="font-size:13px;font-weight:500;color:var(--text-primary);">'+(state.customStamp?'已自定义印章':'使用默认印章')+'</div>';
-        html += '<div style="font-size:11px;color:var(--text-muted);">推荐 PNG 透明底，建议 200x200px 以内</div>';
-        html += '</div></div>';
-        html += '<div style="display:flex;gap:10px;">';
-        html += '<button class="primary-btn" data-action="upload-stamp" style="padding:6px 18px;font-size:12px;"><i class="fa-solid fa-upload"></i> 上传图片</button>';
-        if (state.customStamp) {
-            html += '<button class="primary-btn" data-action="clear-stamp" style="padding:6px 18px;font-size:12px;color:var(--danger);border-color:rgba(200,80,80,0.3);"><i class="fa-solid fa-trash"></i> 清除</button>';
-        }
-        html += '</div>';
-        html += '</div>';
-
-        html += '<div class="card" style="margin-top:12px;">';
-        html += '<div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-tags"></i> 交互标签名称</div>';
-        html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6;">自定义“交互构建”页面中标签的显示名称。</div>';
-        html += '<div style="display:flex;flex-direction:column;gap:12px;">';
-        html += '<div><label style="font-size:13px;font-weight:500;">字卡箱标签</label><input type="text" id="wordCardTabNameInput" value="' + escapeHTML(state.settings.wordCardTabName || '字卡箱') + '" maxlength="10" style="margin-top:4px;"></div>';
-        html += '<div><label style="font-size:13px;font-weight:500;">伴侣状态标签</label><input type="text" id="statusTabNameInput" value="' + escapeHTML(state.settings.statusTabName || '伴侣状态') + '" maxlength="10" style="margin-top:4px;"></div>';
-    html += '<div><label style="font-size:13px;font-weight:500;">拍一拍标签</label><input type="text" id="pokeTabNameInput" value="' + escapeHTML(state.settings.pokeTabName || '拍一拍') + '" maxlength="10" style="margin-top:4px;"></div>';
-        html += '</div>';
-        html += '<button class="primary-btn" data-action="save-tab-names" style="margin-top:16px;width:100%;">保存标签名称</button>';
-        html += '</div>';
-    // 在返回之前，添加 Bark 设置卡片
-    html += renderBarkSettings();
-        return html;
-    }
-
-// Bark 推送设置（添加到设置页面）
-function renderBarkSettings() {
+    // ===== 获取 Bark 设置状态 =====
     const status = typeof getBarkStatus === 'function' ? getBarkStatus() : { isConfigured: false };
     const key = typeof getBarkKey === 'function' ? getBarkKey() : '';
     const maskedKey = key ? key.substring(0, 8) + '...' + key.substring(key.length - 4) : '未设置';
+    
+    // 读取 Bark 设置
+    const barkSettings = (state && state.settings && state.settings.bark) || {};
+    const titleTemplate = barkSettings.titleTemplate || '💕 {name}';
+    const messageTemplate = barkSettings.messageTemplate || '{text}';
+    const reminderTitle = barkSettings.reminderTitle || '💭 有人在等你';
+    const reminderMessage = barkSettings.reminderMessage || '你离开的时候，有人还在等你的消息 💕';
+    const sendOnPartner = barkSettings.sendOnPartnerReply !== false;
+    const sendOnReminder = barkSettings.sendOnReminder !== false;
 
-    return `
+    var html = '<div class="card">';
+    html += '<div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-stamp"></i> 自定义印章</div>';
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6;">上传透明底 PNG 图片作为主页收据卡片的个性化印章。</div>';
+    html += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">';
+    html += '<div style="width:80px;height:80px;border-radius:8px;border:1px dashed var(--border-light);display:flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(0,0,0,0.02);">';
+    if (state.customStamp) {
+        html += '<img src="'+state.customStamp+'" style="max-width:100%;max-height:100%;object-fit:contain;">';
+    } else {
+        html += '<span style="font-size:11px;color:var(--text-muted);">未设置</span>';
+    }
+    html += '</div>';
+    html += '<div style="flex:1;">';
+    html += '<div style="font-size:13px;font-weight:500;color:var(--text-primary);">'+(state.customStamp?'已自定义印章':'使用默认印章')+'</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);">推荐 PNG 透明底，建议 200x200px 以内</div>';
+    html += '</div></div>';
+    html += '<div style="display:flex;gap:10px;">';
+    html += '<button class="primary-btn" data-action="upload-stamp" style="padding:6px 18px;font-size:12px;"><i class="fa-solid fa-upload"></i> 上传图片</button>';
+    if (state.customStamp) {
+        html += '<button class="primary-btn" data-action="clear-stamp" style="padding:6px 18px;font-size:12px;color:var(--danger);border-color:rgba(200,80,80,0.3);"><i class="fa-solid fa-trash"></i> 清除</button>';
+    }
+    html += '</div>';
+    html += '</div>';
+
+    html += '<div class="card" style="margin-top:12px;">';
+    html += '<div class="settings-section-title" style="margin-bottom:12px;"><i class="fa-solid fa-tags"></i> 交互标签名称</div>';
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6;">自定义"交互构建"页面中标签的显示名称。</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:12px;">';
+    html += '<div><label style="font-size:13px;font-weight:500;">字卡箱标签</label><input type="text" id="wordCardTabNameInput" value="' + escapeHTML(state.settings.wordCardTabName || '字卡箱') + '" maxlength="10" style="margin-top:4px;"></div>';
+    html += '<div><label style="font-size:13px;font-weight:500;">伴侣状态标签</label><input type="text" id="statusTabNameInput" value="' + escapeHTML(state.settings.statusTabName || '伴侣状态') + '" maxlength="10" style="margin-top:4px;"></div>';
+    html += '<div><label style="font-size:13px;font-weight:500;">拍一拍标签</label><input type="text" id="pokeTabNameInput" value="' + escapeHTML(state.settings.pokeTabName || '拍一拍') + '" maxlength="10" style="margin-top:4px;"></div>';
+    html += '</div>';
+    html += '<button class="primary-btn" data-action="save-tab-names" style="margin-top:16px;width:100%;">保存标签名称</button>';
+    html += '</div>';
+
+    // ===== Bark 推送设置卡片 =====
+    html += `
         <div class="card" style="margin-top:12px;">
             <div class="settings-section-title" style="margin-bottom:12px;">
                 <i class="fa-regular fa-bell"></i> Bark 推送设置
@@ -3615,64 +3620,198 @@ function renderBarkSettings() {
             <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6;">
                 需要先在 App Store 下载 <strong>Bark</strong> 应用，复制其中的推送 Key 填入下方。
                 <br>支持 iOS 13.0+，即使页面在后台也能收到通知 💕
+                <br>使用 <code>{name}</code> 表示伴侣名称，<code>{text}</code> 表示消息内容。
             </div>
-            <div style="display:flex;flex-direction:column;gap:10px;">
+            
+            <!-- Key 设置 -->
+            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
                 <div style="display:flex;align-items:center;gap:8px;">
                     <span style="font-size:13px;font-weight:500;flex-shrink:0;">Bark Key：</span>
                     <input type="text" id="barkKeyInput" placeholder="粘贴你的 Bark Key" 
                            value="${key || ''}" 
                            style="flex:1;padding:8px 12px;border-radius:10px;border:1px solid var(--border-light);background:var(--bg-input);font-size:13px;">
                 </div>
-                <div style="display:flex;gap:8px;">
-                    <button class="primary-btn" onclick="saveBarkKeyFromUI()" style="flex:1;padding:8px 0;font-size:13px;">
-                        <i class="fa-solid fa-save"></i> 保存
-                    </button>
-                    <button class="primary-btn" onclick="testBarkPushFromUI()" style="flex:1;padding:8px 0;font-size:13px;border-color:rgba(197,164,126,0.3);">
-                        <i class="fa-solid fa-paper-plane"></i> 测试
-                    </button>
+            </div>
+
+            <!-- 推送内容自定义 -->
+            <div style="border-top:1px solid rgba(0,0,0,0.06);padding-top:12px;margin-top:4px;">
+                <div style="font-size:13px;font-weight:500;margin-bottom:8px;">📝 推送内容模板</div>
+                
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:12px;color:var(--text-secondary);">新消息标题</label>
+                    <input type="text" id="barkTitleTemplate" 
+                           value="${escapeHTML(titleTemplate)}" 
+                           style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:var(--bg-input);font-size:13px;margin-top:2px;">
                 </div>
-                <div id="barkStatusDisplay" style="font-size:12px;color:${status.isConfigured ? 'var(--online)' : 'var(--text-muted)'};">
-                    ${status.isConfigured ? '✅ 已绑定：' + maskedKey : '❌ 未绑定'}
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:12px;color:var(--text-secondary);">新消息正文</label>
+                    <input type="text" id="barkMessageTemplate" 
+                           value="${escapeHTML(messageTemplate)}" 
+                           style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:var(--bg-input);font-size:13px;margin-top:2px;">
                 </div>
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:12px;color:var(--text-secondary);">后台提醒标题</label>
+                    <input type="text" id="barkReminderTitle" 
+                           value="${escapeHTML(reminderTitle)}" 
+                           style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:var(--bg-input);font-size:13px;margin-top:2px;">
+                </div>
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:12px;color:var(--text-secondary);">后台提醒正文</label>
+                    <input type="text" id="barkReminderMessage" 
+                           value="${escapeHTML(reminderMessage)}" 
+                           style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:var(--bg-input);font-size:13px;margin-top:2px;">
+                </div>
+                <div style="margin-bottom:4px;">
+    <label style="font-size:12px;color:var(--text-secondary);">后台提醒延迟区间（分钟）</label>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:2px;">
+        <input type="number" id="barkReminderMin" 
+               value="${barkSettings.reminderMin || 1}" 
+               min="1" max="720"
+               placeholder="最小"
+               style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:var(--bg-input);font-size:13px;width:50%;">
+        <span style="font-size:12px;color:var(--text-muted);">~</span>
+        <input type="number" id="barkReminderMax" 
+               value="${barkSettings.reminderMax || 120}" 
+               min="1" max="720"
+               placeholder="最大"
+               style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:var(--bg-input);font-size:13px;width:50%;">
+        <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">分钟</span>
+    </div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">
+        <i class="fa-regular fa-clock"></i> 范围 1 ~ 720 分钟，随机获取延迟时间
+    </div>
+</div>
+            </div>
+
+            <!-- 开关 -->
+<div style="border-top:1px solid rgba(0,0,0,0.06);padding-top:12px;margin-top:4px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
+        <span style="font-size:13px;">对方回复时推送</span>
+        <div class="toggle ${sendOnPartner ? 'active' : ''}" 
+             id="barkSendOnPartnerToggle" data-key="sendOnPartnerReply"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
+        <span style="font-size:13px;">后台提醒推送</span>
+        <div class="toggle ${sendOnReminder ? 'active' : ''}" 
+             id="barkSendOnReminderToggle" data-key="sendOnReminder"></div>
+    </div>
+</div>
+
+            <!-- 操作按钮 -->
+            <div style="display:flex;gap:8px;margin-top:12px;border-top:1px solid rgba(0,0,0,0.06);padding-top:12px;">
+                <button class="primary-btn" onclick="saveBarkSettingsFromUI()" style="flex:1;padding:8px 0;font-size:13px;">
+                    <i class="fa-solid fa-save"></i> 保存所有设置
+                </button>
+                <button class="primary-btn" onclick="testBarkPushFromUI()" style="flex:1;padding:8px 0;font-size:13px;border-color:rgba(197,164,126,0.3);">
+                    <i class="fa-solid fa-paper-plane"></i> 测试
+                </button>
+            </div>
+
+            <div id="barkStatusDisplay" style="font-size:12px;color:${status.isConfigured ? 'var(--online)' : 'var(--text-muted)'};margin-top:8px;text-align:center;">
+                ${status.isConfigured ? '✅ 已绑定：' + maskedKey : '❌ 未绑定'}
             </div>
         </div>
     `;
+
+    return html;
 }
 
-// 保存 Bark Key 的 UI 函数
-window.saveBarkKeyFromUI = function() {
-    const input = document.getElementById('barkKeyInput');
-    if (!input) return;
-    
-    const key = input.value.trim();
-    if (!key) {
-        showNote('请输入 Bark Key', 'warning');
-        return;
+// ==========================================================
+// Bark 设置 UI 操作函数
+// ==========================================================
+
+// 保存所有 Bark 设置
+window.saveBarkSettingsFromUI = function() {
+    // 1. 保存 Key
+    const keyInput = document.getElementById('barkKeyInput');
+    if (keyInput) {
+        const key = keyInput.value.trim();
+        if (key && typeof setBarkKey === 'function') {
+            setBarkKey(key);
+        }
+    }
+
+    // 2. 保存模板设置
+    if (!state.settings.bark) {
+        state.settings.bark = {};
     }
     
-    if (typeof setBarkKey === 'function') {
-        const success = setBarkKey(key);
-        if (success) {
-            const statusEl = document.getElementById('barkStatusDisplay');
-            if (statusEl) {
-                const masked = key.substring(0, 8) + '...' + key.substring(key.length - 4);
-                statusEl.textContent = '✅ 已绑定：' + masked;
-                statusEl.style.color = 'var(--online)';
-            }
-            showNote('Bark Key 已保存 ✅', 'success');
-        } else {
-            showNote('Key 无效，请检查', 'error');
-        }
+    const titleTemplate = document.getElementById('barkTitleTemplate');
+    if (titleTemplate) {
+        state.settings.bark.titleTemplate = titleTemplate.value.trim() || '💕 {name}';
+    }
+    
+    const messageTemplate = document.getElementById('barkMessageTemplate');
+    if (messageTemplate) {
+        state.settings.bark.messageTemplate = messageTemplate.value.trim() || '{text}';
+    }
+    
+    const reminderTitle = document.getElementById('barkReminderTitle');
+    if (reminderTitle) {
+        state.settings.bark.reminderTitle = reminderTitle.value.trim() || '💭 有人在等你';
+    }
+    
+    const reminderMessage = document.getElementById('barkReminderMessage');
+    if (reminderMessage) {
+        state.settings.bark.reminderMessage = reminderMessage.value.trim() || '你离开的时候，有人还在等你的消息 💕';
+    }
+    
+    // 保存延迟区间（单位：分钟）
+const reminderMin = document.getElementById('barkReminderMin');
+const reminderMax = document.getElementById('barkReminderMax');
+if (reminderMin && reminderMax) {
+    const minVal = parseInt(reminderMin.value);
+    const maxVal = parseInt(reminderMax.value);
+    if (!isNaN(minVal) && !isNaN(maxVal) && minVal >= 1 && maxVal <= 720 && minVal <= maxVal) {
+        state.settings.bark.reminderMin = minVal;
+        state.settings.bark.reminderMax = maxVal;
+    } else {
+        showNote('请确保最小值 ≤ 最大值，且范围在 1 ~ 720 分钟之间', 'warning');
+        return;
+    }
+}
+
+    // 3. 保存开关状态
+    const sendOnUser = document.getElementById('barkSendOnUserToggle');
+    if (sendOnUser) {
+        state.settings.bark.sendOnUserMessage = sendOnUser.classList.contains('active');
+    }
+    
+    const sendOnPartner = document.getElementById('barkSendOnPartnerToggle');
+    if (sendOnPartner) {
+        state.settings.bark.sendOnPartnerReply = sendOnPartner.classList.contains('active');
+    }
+    
+    const sendOnReminder = document.getElementById('barkSendOnReminderToggle');
+    if (sendOnReminder) {
+        state.settings.bark.sendOnReminder = sendOnReminder.classList.contains('active');
+    }
+
+    saveState();
+    showNote('Bark 设置已保存 ✅', 'success');
+    
+    // 更新状态显示
+    const statusEl = document.getElementById('barkStatusDisplay');
+    if (statusEl) {
+        const key = state.settings.bark._key || '';
+        const masked = key ? key.substring(0, 8) + '...' + key.substring(key.length - 4) : '未设置';
+        statusEl.textContent = key ? '✅ 已绑定：' + masked : '❌ 未绑定';
+        statusEl.style.color = key ? 'var(--online)' : 'var(--text-muted)';
     }
 };
 
-// 测试 Bark 推送的 UI 函数
+// 测试 Bark 推送
 window.testBarkPushFromUI = function() {
     if (typeof testPush === 'function') {
         testPush();
     } else {
-        showNote('测试功能不可用', 'warning');
+        showNote('测试功能不可用，请检查 Bark 是否已绑定', 'warning');
     }
+};
+
+// 单独保存 Bark Key（保留兼容）
+window.saveBarkKeyFromUI = function() {
+    saveBarkSettingsFromUI();
 };
 
     function renderChatSettings() {
@@ -5769,7 +5908,7 @@ async function checkAndSendAutoReply(partnerId) {
 }
 
 // ==========================================================
-// 音频保活 + Bark 推送 + 应用内弹窗 完整实现
+// 音频保活 + Bark 推送 + 应用内弹窗 完整实现（含自定义设置）
 // ==========================================================
 
 (function() {
@@ -5802,7 +5941,6 @@ async function checkAndSendAutoReply(partnerId) {
                 message = '',
                 duration = 4000,
                 actions = [],
-                onClose = null,
                 type = 'info'
             } = options;
 
@@ -5905,7 +6043,7 @@ async function checkAndSendAutoReply(partnerId) {
     }
 
     // ==========================================================
-    // 2. Bark 推送管理器
+    // 2. Bark 推送管理器（支持模板变量）
     // ==========================================================
 
     class BarkManager {
@@ -5924,6 +6062,12 @@ async function checkAndSendAutoReply(partnerId) {
             this.isEnabled = true;
             try {
                 localStorage.setItem('bark_key', this.userKey);
+                // 同时保存到 state
+                if (typeof state !== 'undefined' && state) {
+                    if (!state.settings.bark) state.settings.bark = {};
+                    state.settings.bark._key = this.userKey;
+                    if (typeof saveState === 'function') saveState();
+                }
             } catch(e) {}
             console.log('[Bark] Key 已设置');
             return true;
@@ -5931,11 +6075,18 @@ async function checkAndSendAutoReply(partnerId) {
 
         loadKey() {
             try {
+                // 优先从 state 读取
+                if (typeof state !== 'undefined' && state && state.settings && state.settings.bark && state.settings.bark._key) {
+                    this.userKey = state.settings.bark._key;
+                    this.isEnabled = true;
+                    console.log('[Bark] 从 state 加载 Key');
+                    return true;
+                }
                 const saved = localStorage.getItem('bark_key');
                 if (saved) {
                     this.userKey = saved;
                     this.isEnabled = true;
-                    console.log('[Bark] 已加载保存的 Key');
+                    console.log('[Bark] 从 localStorage 加载 Key');
                     return true;
                 }
             } catch(e) {}
@@ -5948,6 +6099,23 @@ async function checkAndSendAutoReply(partnerId) {
 
         isConfigured() {
             return this.isEnabled && this.userKey && this.userKey.length > 0;
+        }
+
+        // 替换模板变量
+        _renderTemplate(template, data) {
+            if (!template) return '';
+            let result = template;
+            if (data.name) result = result.replace(/\{name\}/g, data.name);
+            if (data.text) result = result.replace(/\{text\}/g, data.text);
+            return result;
+        }
+
+        // 获取 Bark 设置（从 state）
+        _getSettings() {
+            if (typeof state !== 'undefined' && state && state.settings && state.settings.bark) {
+                return state.settings.bark;
+            }
+            return {};
         }
 
         async send(title, message, url = '/nest/') {
@@ -5981,17 +6149,66 @@ async function checkAndSendAutoReply(partnerId) {
         }
 
         async notifyNewMessage(partnerName, messageText, url = '/nest/') {
-            const title = `💕 ${partnerName || '对方'}`;
-            const body = messageText || '给你发了一条新消息 ✨';
+            if (!this.isConfigured()) return { success: false, error: '未配置 Key' };
+
+            const settings = this._getSettings();
+            
+            // 检查是否启用
+            if (settings.sendOnPartnerReply === false) {
+                console.log('[Bark] 对方回复推送已禁用');
+                return { success: false, error: '已禁用' };
+            }
+
+            const titleTemplate = settings.titleTemplate || '💕 {name}';
+            const messageTemplate = settings.messageTemplate || '{text}';
+            
+            const title = this._renderTemplate(titleTemplate, { name: partnerName || '对方' });
+            const body = this._renderTemplate(messageTemplate, { 
+                name: partnerName || '对方',
+                text: messageText || '给你发了一条新消息 ✨'
+            });
+
+            return this.send(title, body, url);
+        }
+
+        async notifyUserMessage(partnerName, messageText, url = '/nest/') {
+            if (!this.isConfigured()) return { success: false, error: '未配置 Key' };
+
+            const settings = this._getSettings();
+            
+            // 检查是否启用
+            if (settings.sendOnUserMessage === false) {
+                console.log('[Bark] 用户发送推送已禁用');
+                return { success: false, error: '已禁用' };
+            }
+
+            const titleTemplate = settings.titleTemplate || '💕 {name}';
+            const messageTemplate = settings.messageTemplate || '{text}';
+            
+            const title = this._renderTemplate(titleTemplate, { name: partnerName || '对方' });
+            const body = this._renderTemplate(messageTemplate, { 
+                name: partnerName || '对方',
+                text: messageText || '发了一条新消息'
+            });
+
             return this.send(title, body, url);
         }
 
         async notifyReminder() {
-            return this.send(
-                '💭 有人在等你',
-                '你已经离开一会儿了，梦角还在陪着你呢 💕',
-                '/nest/'
-            );
+            if (!this.isConfigured()) return { success: false, error: '未配置 Key' };
+
+            const settings = this._getSettings();
+            
+            // 检查是否启用
+            if (settings.sendOnReminder === false) {
+                console.log('[Bark] 后台提醒推送已禁用');
+                return { success: false, error: '已禁用' };
+            }
+
+            const title = settings.reminderTitle || '💭 有人在等你';
+            const body = settings.reminderMessage || '你离开的时候，有人还在等你的消息 💕';
+
+            return this.send(title, body, '/nest/');
         }
 
         async test() {
@@ -6146,7 +6363,7 @@ async function checkAndSendAutoReply(partnerId) {
     }
 
     // ==========================================================
-    // 4. 组合管理器
+    // 4. 组合管理器（整合所有功能）
     // ==========================================================
 
     class KeepAliveManager {
@@ -6198,102 +6415,68 @@ async function checkAndSendAutoReply(partnerId) {
         }
 
         setupTimers() {
-            if (this._checkInterval) {
-                clearInterval(this._checkInterval);
+    if (this._checkInterval) {
+        clearInterval(this._checkInterval);
+    }
+    this._checkInterval = setInterval(() => {
+        if (this.isHidden && this.bark.isConfigured()) {
+            const settings = this._getBarkSettings();
+            // 从 state 读取分钟数，转换为秒
+            const minDelayMinutes = (settings && settings.reminderMin) || 1;
+            const maxDelayMinutes = (settings && settings.reminderMax) || 120;
+            // 分钟 → 秒 转换
+            const minDelay = minDelayMinutes * 60;
+            const maxDelay = maxDelayMinutes * 60;
+            // 取随机值
+            const delay = minDelay + Math.random() * (maxDelay - minDelay);
+            const duration = (Date.now() - this.backgroundStartTime) / 1000;
+            
+            if (duration > delay && !this.notificationShown) {
+                this.notificationShown = true;
+                this.bark.notifyReminder();
+                console.log('[KeepAlive] 发送后台提醒，延迟:', Math.round(delay / 60), '分钟');
             }
-            this._checkInterval = setInterval(() => {
-                if (this.isHidden && this.bark.isConfigured()) {
-                    const duration = (Date.now() - this.backgroundStartTime) / 1000;
-                    
-                    if (duration > 120 && !this.notificationShown) {
-                        this.notificationShown = true;
-                        this.bark.notifyReminder();
-                        console.log('[KeepAlive] 发送后台提醒');
-                    }
-                }
-            }, 30000);
+        }
+    }, 30000);
+}
+
+        _getBarkSettings() {
+            if (typeof state !== 'undefined' && state && state.settings && state.settings.bark) {
+                return state.settings.bark;
+            }
+            return {};
         }
 
         setupMessageInterceptor() {
             if (this._hasIntercepted) return;
             this._hasIntercepted = true;
 
-            // 保存原始函数引用
             const _this = this;
 
-            // 拦截 window.sendMessage（用户发送消息时触发推送）
-            const originalSendMessage = window.sendMessage;
-            if (originalSendMessage) {
-                window.sendMessage = async function() {
-                    // 调用原始函数
-                    const result = originalSendMessage.apply(this, arguments);
-                    
-                    // 如果页面在后台且 Bark 已配置，发送推送
-                    if (document.hidden && _this.bark.isConfigured()) {
-                        try {
-                            const partner = typeof getCurrentPartner === 'function' ? getCurrentPartner() : null;
-                            const name = partner ? partner.name : '对方';
-                            
-                            const messages = chatLoader ? chatLoader.allMessages : [];
-                            const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
-                            const text = lastMsg && lastMsg.text ? lastMsg.text : '发了一条新消息';
-                            
-                            await _this.bark.notifyNewMessage(name, text);
-                        } catch (e) {
-                            console.warn('[Bark] 推送发送失败:', e);
-                        }
-                    }
-                    
-                    return result;
-                };
-            }
-
             // 拦截 simulateReply（对方回复时触发推送）
-            const originalSimulateReply = window.simulateReply;
-            if (originalSimulateReply) {
-                window.simulateReply = async function() {
-                    // 调用原始函数
-                    const result = originalSimulateReply.apply(this, arguments);
-                    
-                    // 如果页面在后台且 Bark 已配置，发送推送
-                    if (document.hidden && _this.bark.isConfigured()) {
-                        try {
-                            const partner = typeof getCurrentPartner === 'function' ? getCurrentPartner() : null;
-                            const name = partner ? partner.name : '对方';
-                            
-                            const messages = chatLoader ? chatLoader.allMessages : [];
-                            const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
-                            const text = lastMsg && lastMsg.text ? lastMsg.text : '给你发了一条新消息 ✨';
-                            
-                            await _this.bark.notifyNewMessage(name, text);
-                        } catch (e) {
-                            console.warn('[Bark] 推送发送失败:', e);
-                        }
-                    }
-                    
-                    return result;
-                };
+const originalSimulateReply = window.simulateReply;
+if (originalSimulateReply) {
+    window.simulateReply = async function() {
+        const result = originalSimulateReply.apply(this, arguments);
+        
+        if (document.hidden && _this.bark.isConfigured()) {
+            try {
+                const partner = typeof getCurrentPartner === 'function' ? getCurrentPartner() : null;
+                const name = partner ? partner.name : '对方';
+                
+                const messages = chatLoader ? chatLoader.allMessages : [];
+                const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+                const text = lastMsg && lastMsg.text ? lastMsg.text : '给你发了一条新消息 ✨';
+                
+                await _this.bark.notifyNewMessage(name, text);
+            } catch (e) {
+                console.warn('[Bark] 推送发送失败:', e);
             }
-
-            // 拦截 sendEmoji（发送表情时触发推送）
-            const originalSendEmoji = window.sendEmoji;
-            if (originalSendEmoji) {
-                window.sendEmoji = async function(imageData) {
-                    const result = originalSendEmoji.apply(this, arguments);
-                    
-                    if (document.hidden && _this.bark.isConfigured()) {
-                        try {
-                            const partner = typeof getCurrentPartner === 'function' ? getCurrentPartner() : null;
-                            const name = partner ? partner.name : '对方';
-                            await _this.bark.notifyNewMessage(name, '发了一个表情 💕');
-                        } catch (e) {
-                            console.warn('[Bark] 推送发送失败:', e);
-                        }
-                    }
-                    
-                    return result;
-                };
-            }
+        }
+        
+        return result;
+    };
+       }
         }
 
         setBarkKey(key) {
@@ -6349,7 +6532,6 @@ async function checkAndSendAutoReply(partnerId) {
             };
         }
 
-        // 清理资源
         destroy() {
             if (this._checkInterval) {
                 clearInterval(this._checkInterval);
@@ -6430,8 +6612,7 @@ async function checkAndSendAutoReply(partnerId) {
         applyDarkMode(state.settings.darkMode);
         switchScreen('main');
 
-    // 新增：启动 Bark + 音频保活
-    // 延迟 3 秒启动，确保其他资源加载完成
+    // ===== 新增：启动 Bark + 音频保活 =====
     setTimeout(function() {
         if (typeof keepAliveManager !== 'undefined' && keepAliveManager.start) {
             keepAliveManager.start();
