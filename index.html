@@ -7175,7 +7175,11 @@ async function checkAndSendAutoReply(partnerId) {
 // ==========================================================
 // Bark：统一的“对方消息已生成”推送出口
 // ==========================================================
-async function notifyBarkForPartnerMessage(partnerId, replyMsg, source) {
+// 注意：这个函数被 sendMessage / sendEmoji / simulateReply 等多处调用，
+// 而那些调用者都在外层 IIFE 作用域，这个函数之前只是普通 function 声明，
+// 没有挂到 window 上 —— 导致外部调用直接抛 ReferenceError（Can't find variable），
+// 把整个回复流程的 try 块中断在 appendMessage 之前。这就是"回复生成了但界面上不出现"的真正原因。
+window.notifyBarkForPartnerMessage = async function notifyBarkForPartnerMessage(partnerId, replyMsg, source) {
     try {
         // Bark 只处理明确允许的“对方新事件”：
         // user_reply = 用户主动发送信息后，对方回复
