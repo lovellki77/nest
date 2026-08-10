@@ -2864,9 +2864,17 @@ if (placeholder) {
             });
             if (updates.length > 0) {
                 await Promise.all(updates).catch(e => console.error('补标记已读失败', e));
-                this.container.innerHTML = '';
-                this.renderAll();
-                this.scrollToBottom();
+                // 不再 renderAll()。初始化阶段如果刚好有实时回复追加进来，
+                // 全量重绘会把刚追加的 DOM 瞬间覆盖掉，表现为“切换伴侣后才出现”。
+                // 这里只更新现有已读回执，保持实时消息 DOM 不被覆盖。
+                this.container.querySelectorAll('.read-receipt').forEach(el => {
+                    el.classList.add('read');
+                    const icon = el.querySelector('i');
+                    if (icon) {
+                        icon.classList.remove('fa-check');
+                        icon.classList.add('fa-check-double');
+                    }
+                });
                 this._setCache(this.allMessages);
             }
         }
@@ -3581,6 +3589,19 @@ function completePartnerReply(partnerId) {
 // 不再使用 5 秒 ChatSync 轮询。消息生成后直接更新当前聊天，
 // IndexedDB 只负责持久化；这样避免轮询与消息写入/渲染产生竞争。
 
+// ===================== 当前聊天实时消息入口 =====================
+// 仅负责把已经写入 DB 的伴侣消息立即追加到当前正在查看的聊天。
+// 不创建轮询/心跳，也不负责非当前伴侣的消息加载。
+function appendPartnerMessageToCurrentChat(partnerId, message) {
+    const chatScreen = document.getElementById('chatScreen');
+    if (!chatLoader || chatLoader.isDestroyed) return false;
+    if (chatLoader.partnerId !== partnerId) return false;
+    if (state.currentPartnerId !== partnerId) return false;
+    if (!chatScreen || chatScreen.classList.contains('hidden')) return false;
+    chatLoader.appendMessage(message);
+    return true;
+}
+
 // ===================== 模拟伴侣回复 =====================
 function simulateReply() {
     const replyPartnerId = state.currentPartnerId;
@@ -3637,11 +3658,8 @@ function simulateReply() {
                     };
                     const replyId = await saveMessageToDB(replyPartnerId, replyMsg);
                     replyMsg.id = replyId;
-                    if (state.currentPartnerId === replyPartnerId && chatLoader) {
-                        chatLoader.appendMessage(replyMsg);
-                        if (!document.getElementById('chatScreen').classList.contains('hidden')) {
-                            clearUnread();
-                        }
+                    if (appendPartnerMessageToCurrentChat(replyPartnerId, replyMsg)) {
+                        clearUnread();
                     }
                     completePartnerReply(replyPartnerId);
                     saveState();
@@ -3771,9 +3789,8 @@ function simulateReply() {
                     const replyId = await saveMessageToDB(partnerId, replyMsg);
                     replyMsg.id = replyId;
                     notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
-                    if (state.currentPartnerId === partnerId && chatLoader) {
-                        chatLoader.appendMessage(replyMsg);
-                        if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
+                    if (appendPartnerMessageToCurrentChat(partnerId, replyMsg)) {
+                        clearUnread();
                     }
                 }
                 updateBadge();
@@ -6266,9 +6283,7 @@ async function runScheduledAutoMessage() {
         console.log('[MSG-PROACTIVE] saved', { partnerId: randomPartner.id, id: replyId });
         // 主动消息不显示“正在输入”，直接作为新消息到达。
         notifyBarkForPartnerMessage(randomPartner.id, replyMsg, 'partner_proactive');
-        if (randomPartner.id === state.currentPartnerId && chatLoader && chatLoader.partnerId === randomPartner.id && !document.getElementById('chatScreen').classList.contains('hidden')) {
-            chatLoader.appendMessage(replyMsg);
-        }
+        appendPartnerMessageToCurrentChat(randomPartner.id, replyMsg);
         await updateBadge();
         saveState();
     } catch (e) {
@@ -6324,8 +6339,7 @@ function restartAutoMessage() {
                 replyMsg.id = savedId;
                 notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                 replyCount++;
-                if (state.currentPartnerId === partnerId && chatLoader) {
-                    chatLoader.appendMessage(replyMsg);
+                if (appendPartnerMessageToCurrentChat(partnerId, replyMsg)) {
                     chatLoader.scrollToBottom();
                 }
             }
