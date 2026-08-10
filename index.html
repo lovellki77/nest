@@ -3789,7 +3789,8 @@ function simulateReply() {
                     const replyId = await saveMessageToDB(partnerId, replyMsg);
                     replyMsg.id = replyId;
                     notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
-                    if (appendPartnerMessageToCurrentChat(partnerId, replyMsg)) {
+                    if (state.currentPartnerId === partnerId && chatLoader && chatLoader.partnerId === partnerId) {
+                        chatLoader.appendMessage(replyMsg);
                         clearUnread();
                     }
                 }
