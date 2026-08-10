@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
     <title>梦语</title>
-<!-- v6：干净事件驱动；无5秒ChatSync；主动消息仅使用原有定时器 -->
+<!-- v6：干净事件驱动；主动消息保留10秒前台兜底；无5秒ChatSync -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
@@ -2864,17 +2864,9 @@ if (placeholder) {
             });
             if (updates.length > 0) {
                 await Promise.all(updates).catch(e => console.error('补标记已读失败', e));
-                // 不再 renderAll()。初始化阶段如果刚好有实时回复追加进来，
-                // 全量重绘会把刚追加的 DOM 瞬间覆盖掉，表现为“切换伴侣后才出现”。
-                // 这里只更新现有已读回执，保持实时消息 DOM 不被覆盖。
-                this.container.querySelectorAll('.read-receipt').forEach(el => {
-                    el.classList.add('read');
-                    const icon = el.querySelector('i');
-                    if (icon) {
-                        icon.classList.remove('fa-check');
-                        icon.classList.add('fa-check-double');
-                    }
-                });
+                this.container.innerHTML = '';
+                this.renderAll();
+                this.scrollToBottom();
                 this._setCache(this.allMessages);
             }
         }
@@ -3170,36 +3162,46 @@ if (!newState.settings.autoReply) {
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
         var nav = document.querySelector('[data-screen="'+name+'"]');
         if (nav) nav.classList.add('active');
-        if (name === 'main') renderMain();
+        if (name === 'main') {  renderMain(); }
         if (name === 'chat') { renderChat(); clearUnread(); }
-        if (name === 'settings') renderSettingsMain();
+        if (name === 'settings') {  renderSettingsMain(); }
+        // 导航切换本身也必须刷新未读徽标，不能依赖再次进入聊天页。
+        setTimeout(updateBadge, 0);
+        setTimeout(updateBadge, 250);
+        setTimeout(updateBadge, 800);
         hideContextMenu();
     }
 
     function sortedPartners() { return state.partners.slice().sort((a,b) => a.pinned !== b.pinned ? (a.pinned ? -1 : 1) : a.order - b.order); }
 
-    function updateBadge() {
+    let __badgeRefreshSeq = 0;
+    async function updateBadge() {
+        const seq = ++__badgeRefreshSeq;
         var btn = document.getElementById('chatNavBtn');
-        var existing = btn.querySelectorAll('.nav-badge');
-        existing.forEach(function(el) { el.remove(); });
-        (async function() {
-            let total = 0;
-            for (var pid in state._lastRead) {
-                const msgs = await loadMessagesFromDB(pid, 9999, 0);
-                for (var j = 0; j < msgs.length; j++) {
-                    var msg = msgs[j];
-                    if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > (state._lastRead[pid] || 0)) {
-                        total++;
-                    }
+        if (!btn) return;
+        let total = 0;
+        const partners = Array.isArray(state.partners) ? state.partners : [];
+        try {
+            const counts = await Promise.all(partners.map(async function(partner) {
+                const lastRead = (state._lastRead && state._lastRead[partner.id]) || 0;
+                const msgs = await loadMessagesFromDB(partner.id, 9999, 0);
+                let count = 0;
+                for (const msg of msgs) {
+                    if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > lastRead) count++;
                 }
-            }
+                return count;
+            }));
+            total = counts.reduce((a, b) => a + b, 0);
+            // 只让最新一次刷新结果改 DOM，避免异步查询先后顺序覆盖新状态。
+            if (seq !== __badgeRefreshSeq || !document.body.contains(btn)) return;
+            btn.querySelectorAll('.nav-badge').forEach(function(el) { el.remove(); });
             if (total > 0) {
                 var b = document.createElement('span');
                 b.className = 'nav-badge';
                 b.textContent = total > 99 ? '99+' : total;
                 btn.appendChild(b);
             }
-        })();
+        } catch(e) { console.warn('[Badge] 刷新未读失败:', e); }
     }
 
     function clearUnread() {
@@ -3540,22 +3542,6 @@ function getMergedReply() {
         }
     }
 
-// ===================== 临时调试：普通回复输出链路 =====================
-// 调试完成后整段可删除，并将所有 debugReplyFlow(...) 调用移除。
-const DEBUG_REPLY_FLOW = true;
-function forceReplyDebugAlert(step, detail = '') {
-    const text = `【普通回复·强制调试 ${step}】\n\n${detail}`;
-    console.log(text);
-    window.alert(text);
-}
-
-function debugReplyFlow(step, detail = '') {
-    if (!DEBUG_REPLY_FLOW) return;
-    const msg = `[回复调试] ${step}${detail ? '｜' + detail : ''}`;
-    console.log(msg);
-    try { showNote(msg, 'info', 2600); } catch (e) { console.log(msg); }
-}
-
 // ===================== 统一消息/正在输入状态管理 =====================
 window.__typingPartners = window.__typingPartners || new Set();
 window.__typingPartnerId = null;
@@ -3599,32 +3585,17 @@ function completePartnerReply(partnerId) {
     if(window.__typingClearTimers && window.__typingClearTimers[partnerId]) { clearTimeout(window.__typingClearTimers[partnerId]); delete window.__typingClearTimers[partnerId]; }
     hidePartnerTyping(partnerId);
     renderTypingPartners();
+    updateBadge();
 }
 
 // 当前版本采用纯事件驱动聊天更新：
 // 不再使用 5 秒 ChatSync 轮询。消息生成后直接更新当前聊天，
 // IndexedDB 只负责持久化；这样避免轮询与消息写入/渲染产生竞争。
 
-// ===================== 当前聊天实时消息入口 =====================
-// 仅负责把已经写入 DB 的伴侣消息立即追加到当前正在查看的聊天。
-// 不创建轮询/心跳，也不负责非当前伴侣的消息加载。
-function appendPartnerMessageToCurrentChat(partnerId, message) {
-    const chatScreen = document.getElementById('chatScreen');
-    if (!chatLoader || chatLoader.isDestroyed) return false;
-    if (chatLoader.partnerId !== partnerId) return false;
-    if (state.currentPartnerId !== partnerId) return false;
-    if (!chatScreen || chatScreen.classList.contains('hidden')) return false;
-    chatLoader.appendMessage(message);
-    return true;
-}
-
 // ===================== 模拟伴侣回复 =====================
 function simulateReply() {
     const replyPartnerId = state.currentPartnerId;
-    debugReplyFlow('① 开始 simulateReply', `partnerId=${replyPartnerId}, current=${state.currentPartnerId}, chatLoader=${!!chatLoader}, loaderPartner=${chatLoader?.partnerId || '无'}`);
-    forceReplyDebugAlert('1/6 回复任务启动', `simulateReply 已启动\npartnerId=${replyPartnerId}\ncurrentPartnerId=${state.currentPartnerId}\nchatLoader=${!!chatLoader}\nloaderPartner=${chatLoader?.partnerId || '无'}`);
     showPartnerTyping(replyPartnerId);
-    debugReplyFlow('② 正在输入已触发', `partnerId=${replyPartnerId}`);
     // 如果字卡库为空，不回复
     if (!state.wordCards || state.wordCards.length === 0) {
         completePartnerReply(replyPartnerId);
@@ -3677,10 +3648,14 @@ function simulateReply() {
                     };
                     const replyId = await saveMessageToDB(replyPartnerId, replyMsg);
                     replyMsg.id = replyId;
-                    if (appendPartnerMessageToCurrentChat(replyPartnerId, replyMsg)) {
-                        clearUnread();
+                    if (state.currentPartnerId === replyPartnerId && chatLoader) {
+                        chatLoader.appendMessage(replyMsg);
+                        if (!document.getElementById('chatScreen').classList.contains('hidden')) {
+                            clearUnread();
+                        }
                     }
                     completePartnerReply(replyPartnerId);
+                    updateBadge();
                     saveState();
                 } else {
                     completePartnerReply(replyPartnerId);
@@ -3714,62 +3689,30 @@ function simulateReply() {
     const replyCount = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
     let delay = 0;
 
-    debugReplyFlow('③ 回复数量确定', `count=${replyCount}`);
     for (let i = 0; i < replyCount; i++) {
         const delayRange = state.settings.maxReplyDelay - state.settings.minReplyDelay;
         delay += state.settings.minReplyDelay + Math.random() * delayRange;
-        debugReplyFlow('④ 已安排回复定时器', `index=${i+1}/${replyCount}, delay=${Math.round(delay)}ms, partnerId=${replyPartnerId}`);
         setTimeout(async function() {
-            debugReplyFlow('⑤ 定时器已触发', `index=${i+1}/${replyCount}, current=${state.currentPartnerId}, loaderPartner=${chatLoader?.partnerId || '无'}, destroyed=${!!chatLoader?.isDestroyed}`);
-            forceReplyDebugAlert('2/6 定时器触发', `第 ${i+1}/${replyCount} 条回复\ncurrent=${state.currentPartnerId}\nloaderPartner=${chatLoader?.partnerId || '无'}\ndestroyed=${!!chatLoader?.isDestroyed}`);
-            debugReplyFlow('⑥ 开始生成回复', `partnerId=${replyPartnerId}`);
             const replyContent = await generateReplyContent(replyPartnerId);
-            debugReplyFlow('⑦ 回复生成完成', replyContent ? `有内容=${JSON.stringify(replyContent).slice(0,80)}` : '无内容');
             if (replyContent) {
                 const replyMsg = {
                     sender: replyPartnerId,
                     timestamp: Date.now(),
                     ...replyContent
                 };
-                debugReplyFlow('⑧ 开始保存 DB', `partnerId=${replyPartnerId}`);
                 const replyId = await saveMessageToDB(replyPartnerId, replyMsg);
                 replyMsg.id = replyId;
-                const debugMsg = (title, detail) => {
-                    debugReplyFlow(title, detail);
-                    alert(`[回复调试] ${title}\n${detail}`);
-                };
-                debugMsg('⑨ DB 保存成功', `messageId=${replyId}, current=${state.currentPartnerId}, loaderPartner=${chatLoader?.partnerId || '无'}, destroyed=${!!chatLoader?.isDestroyed}`);
-                forceReplyDebugAlert('3/6 DB 保存成功', `messageId=${replyId}\npartnerId=${replyPartnerId}`);
-                const chatScreen = document.getElementById('chatScreen');
-                const isCurrentPartner = state.currentPartnerId === replyPartnerId;
-                const isCurrentLoader = !!chatLoader && chatLoader.partnerId === replyPartnerId;
-                const isLoaderAlive = !!chatLoader && !chatLoader.isDestroyed;
-                const isChatVisible = !!chatScreen && !chatScreen.classList.contains('hidden');
-                debugMsg('⑩ 检查实时输出条件', `current=${isCurrentPartner}, loaderPartner=${isCurrentLoader}, loaderAlive=${isLoaderAlive}, chatVisible=${isChatVisible}`);
-                forceReplyDebugAlert('4/6 实时输出条件', `currentPartner=${isCurrentPartner ? 'YES' : 'NO'}\nloaderPartner=${isCurrentLoader ? 'YES' : 'NO'}\nloaderAlive=${isLoaderAlive ? 'YES' : 'NO'}\nchatVisible=${isChatVisible ? 'YES' : 'NO'}`);
-                if (isCurrentPartner && isCurrentLoader && isLoaderAlive) {
-                    debugMsg('⑪ 准备 appendMessage', `messageId=${replyId}`);
-                    forceReplyDebugAlert('5/6 准备 appendMessage', `messageId=${replyId}`);
+                if (state.currentPartnerId === replyPartnerId && chatLoader) {
                     chatLoader.appendMessage(replyMsg);
-                    debugMsg('⑫ appendMessage 已执行', `messageId=${replyId}`);
-                    forceReplyDebugAlert('6/6 appendMessage 已执行', `messageId=${replyId}\n当前消息数量=${chatLoader?.allMessages?.length ?? 'unknown'}`);
-                    if (isChatVisible) {
-                        debugMsg('⑬ 准备 clearUnread', `partnerId=${replyPartnerId}`);
+                    if (!document.getElementById('chatScreen').classList.contains('hidden')) {
                         clearUnread();
-                        debugReplyFlow('⑭ clearUnread 已执行', `partnerId=${replyPartnerId}`);
                     }
-                } else {
-                    debugMsg('⑪ 实时输出被跳过', `current=${isCurrentPartner}, loaderPartner=${isCurrentLoader}, loaderAlive=${isLoaderAlive}, chatVisible=${isChatVisible}`);
                 }
-                debugMsg('⑮ updateBadge 即将调用', `messageId=${replyId}`);
                 updateBadge();
-                debugReplyFlow('⑯ updateBadge 已调用', `messageId=${replyId}`);
                 saveState();
             }
             if (i === replyCount - 1) {
-                debugReplyFlow('⑰ 最后一条回复完成，准备结束正在输入', `partnerId=${replyPartnerId}`);
                 completePartnerReply(replyPartnerId);
-                debugReplyFlow('⑱ 正在输入已结束', `partnerId=${replyPartnerId}`);
                 // 自动回复只针对本次回复所属的伴侣，绝不能读取变化后的 currentPartnerId。
                 checkAndSendAutoReply(replyPartnerId);
             }
@@ -3779,6 +3722,7 @@ function simulateReply() {
 
     // 发送消息（用户）
     window.sendMessage = async function() {
+        alert('【正常文字调试 ①】sendMessage() 已进入\n\n准备开始追踪正常文字 → 伴侣回复的完整链路。\n\n点击确定继续。');
         var inp = document.getElementById('chatInput');
         var text = inp.value.trim();
         if (!text || text.length > 500) return;
@@ -3795,6 +3739,7 @@ function simulateReply() {
         updateCharCount();
         try {
             const savedId = await saveMessageToDB(partnerId, messageData);
+            alert('【正常文字调试 ②】用户消息已成功写入 DB\n\npartnerId = ' + partnerId + '\nmessageId = ' + savedId + '\n\n即将进入伴侣回复调度。\n\n点击确定继续。');
             messageData.id = savedId;
             state._stats.totalSent++;
             saveState();
@@ -3811,6 +3756,7 @@ function simulateReply() {
         var readDelay = Math.min(2000, Math.max(500, totalDelay * 0.3));
         var replyDelay = totalDelay - readDelay;
         setTimeout(async function() {
+            alert('【正常文字调试 ③】readDelay 定时器已触发\n\n说明：正常文字发送后的异步回复流程已经开始执行。\n\npartnerId = ' + partnerId + '\ncurrentPartnerId = ' + state.currentPartnerId + '\n\n点击确定继续。');
             if (chatLoader && state.currentPartnerId === partnerId) {
                 const updatePromises = [];
                 chatLoader.allMessages.forEach(m => {
@@ -3827,6 +3773,7 @@ function simulateReply() {
                 Promise.all(updatePromises).catch(e => console.error('更新已读状态失败', e));
             }
             showPartnerTyping(partnerId);
+            alert('【正常文字调试 ④】正在输入已触发\n\nshowPartnerTyping(' + partnerId + ') 已执行。\n\n接下来等待真正的回复定时器。\n\n点击确定继续。');
         }, readDelay);
         setTimeout(async function() {
     var count = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
@@ -3834,15 +3781,16 @@ function simulateReply() {
         (function(idx) {
             setTimeout(async function() {
                 try {
+                alert('【正常文字调试 ⑥】单条回复定时器已真正触发\n\nidx = ' + idx + '\npartnerId = ' + partnerId + '\n\n现在开始调用 generateReplyContent()。\n\n点击确定继续。');
                 const replyContent = await generateReplyContent(partnerId);
                 if (replyContent) {
                     const replyMsg = { sender: partnerId, timestamp: Date.now(), ...replyContent };
                     const replyId = await saveMessageToDB(partnerId, replyMsg);
                     replyMsg.id = replyId;
                     notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
-                    if (state.currentPartnerId === partnerId && chatLoader && chatLoader.partnerId === partnerId) {
+                    if (state.currentPartnerId === partnerId && chatLoader) {
                         chatLoader.appendMessage(replyMsg);
-                        clearUnread();
+                        if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
                     }
                 }
                 updateBadge();
@@ -3906,6 +3854,7 @@ function simulateReply() {
         }, readDelay);
         setTimeout(async function() {
             var count = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
+            alert('【正常文字调试 ⑤】回复调度定时器已触发\n\n本次预计回复数量 = ' + count + '\nreplyDelay = ' + Math.round(replyDelay) + 'ms\npartnerId = ' + partnerId + '\n\n即将进入 generateReplyContent()。\n\n点击确定继续。');
             for (var j = 0; j < count; j++) {
                 (function(idx) {
                     setTimeout(async function() {
@@ -6335,7 +6284,9 @@ async function runScheduledAutoMessage() {
         console.log('[MSG-PROACTIVE] saved', { partnerId: randomPartner.id, id: replyId });
         // 主动消息不显示“正在输入”，直接作为新消息到达。
         notifyBarkForPartnerMessage(randomPartner.id, replyMsg, 'partner_proactive');
-        appendPartnerMessageToCurrentChat(randomPartner.id, replyMsg);
+        if (randomPartner.id === state.currentPartnerId && chatLoader && chatLoader.partnerId === randomPartner.id && !document.getElementById('chatScreen').classList.contains('hidden')) {
+            chatLoader.appendMessage(replyMsg);
+        }
         await updateBadge();
         saveState();
     } catch (e) {
@@ -6391,7 +6342,8 @@ function restartAutoMessage() {
                 replyMsg.id = savedId;
                 notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                 replyCount++;
-                if (appendPartnerMessageToCurrentChat(partnerId, replyMsg)) {
+                if (state.currentPartnerId === partnerId && chatLoader) {
+                    chatLoader.appendMessage(replyMsg);
                     chatLoader.scrollToBottom();
                 }
             }
@@ -7512,6 +7464,21 @@ class KeepAliveManager {
         setInterval(fetchAndUpdateWeather, 30 * 60 * 1000);
         startAutoOnlineToggle();
         restartAutoMessage();
+        if (window.__autoMessageHeartbeat) clearInterval(window.__autoMessageHeartbeat);
+        window.__autoMessageHeartbeat = setInterval(function() {
+            if (document.hidden) return;
+            if (state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !window.__autoMessageRunning) {
+                // 只清掉已经到期的旧 timer；正常 timer 尚未到期时完全不干预。
+                if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
+                runScheduledAutoMessage();
+            }
+        }, 10000);
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !window.__autoMessageRunning) {
+                if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
+                runScheduledAutoMessage();
+            }
+        });
 
         const todayStr = new Date().toDateString();
         if (state.stepsDate !== todayStr) {
