@@ -3776,23 +3776,54 @@ function simulateReply() {
             alert('【正常文字调试 ④】正在输入已触发\n\nshowPartnerTyping(' + partnerId + ') 已执行。\n\n接下来等待真正的回复定时器。\n\n点击确定继续。');
         }, readDelay);
         setTimeout(async function() {
+    alert('【普通回复调试 ⑥】\n\n单条回复定时器已触发\n即将进入 generateReplyContent()');
     var count = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
     for (var j = 0; j < count; j++) {
         (function(idx) {
             setTimeout(async function() {
                 try {
                 alert('【正常文字调试 ⑥】单条回复定时器已真正触发\n\nidx = ' + idx + '\npartnerId = ' + partnerId + '\n\n现在开始调用 generateReplyContent()。\n\n点击确定继续。');
+                alert('【普通回复调试 ⑦】\n\ngenerateReplyContent() 开始执行\npartnerId = ' + partnerId);
                 const replyContent = await generateReplyContent(partnerId);
+
+                alert('【普通回复调试 ⑧】\n\ngenerateReplyContent() 已返回\nreplyContent = ' + (replyContent ? 'YES' : 'NO') +
+                      '\n\n' + (replyContent ? JSON.stringify(replyContent).slice(0, 300) : '没有生成回复内容'));
+
                 if (replyContent) {
+                    alert('【普通回复调试 ⑨】\n\n准备执行 saveMessageToDB()');
                     const replyMsg = { sender: partnerId, timestamp: Date.now(), ...replyContent };
                     const replyId = await saveMessageToDB(partnerId, replyMsg);
                     replyMsg.id = replyId;
-                    notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
-                    if (state.currentPartnerId === partnerId && chatLoader) {
+
+                    alert('【普通回复调试 ⑩】\n\nsaveMessageToDB() 成功\nmessageId = ' + replyId);
+
+                    const chatScreenEl = document.getElementById('chatScreen');
+                    const chatVisible = !!chatScreenEl && !chatScreenEl.classList.contains('hidden');
+                    const loaderExists = !!chatLoader;
+                    const loaderPartner = loaderExists ? chatLoader.partnerId : 'NULL';
+                    const loaderDestroyed = loaderExists ? !!chatLoader.destroyed : true;
+                    const currentMatch = state.currentPartnerId === partnerId;
+                    const loaderMatch = loaderExists && chatLoader.partnerId === partnerId;
+                    const aliveMatch = loaderExists && !loaderDestroyed;
+
+                    alert('【普通回复调试 ⑪】\n\nappendMessage 条件检查\n' +
+                          'currentPartner = ' + (currentMatch ? 'YES' : 'NO') + '\n' +
+                          'chatLoader = ' + (loaderExists ? 'YES' : 'NO') + '\n' +
+                          'loaderPartner = ' + loaderPartner + '\n' +
+                          'loaderMatch = ' + (loaderMatch ? 'YES' : 'NO') + '\n' +
+                          'loaderAlive = ' + (aliveMatch ? 'YES' : 'NO') + '\n' +
+                          'chatVisible = ' + (chatVisible ? 'YES' : 'NO'));
+
+                    if (currentMatch && loaderExists && loaderMatch && aliveMatch) {
+                        alert('【普通回复调试 ⑫】\n\n即将执行 chatLoader.appendMessage()');
                         chatLoader.appendMessage(replyMsg);
-                        if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
+                        alert('【普通回复调试 ⑬】\n\nchatLoader.appendMessage() 已执行完成');
+                        if (chatVisible) { clearUnread(); }
+                    } else {
+                        alert('【普通回复调试 ⑫】\n\nappendMessage() 被跳过\n原因：实时输出条件未全部满足');
                     }
                 }
+
                 updateBadge();
                 saveState();
 
@@ -3801,7 +3832,10 @@ function simulateReply() {
                 if (idx === count - 1) {
                     checkAndSendAutoReply(partnerId);
                 }
-                } catch(e) { console.error('[REPLY] reply generation failed:',e); }
+                } catch(e) {
+                    alert('【普通回复调试 ERROR】\n\n回复链路发生异常：\n' + (e && e.stack ? e.stack : e));
+                    console.error('[REPLY] reply generation failed:',e);
+                }
                 finally { if (idx === count - 1) completePartnerReply(partnerId); }
             }, idx * 1200);
         })(j);
