@@ -3543,6 +3543,12 @@ function getMergedReply() {
 // ===================== 临时调试：普通回复输出链路 =====================
 // 调试完成后整段可删除，并将所有 debugReplyFlow(...) 调用移除。
 const DEBUG_REPLY_FLOW = true;
+function forceReplyDebugAlert(step, detail = '') {
+    const text = `【普通回复·强制调试 ${step}】\n\n${detail}`;
+    console.log(text);
+    window.alert(text);
+}
+
 function debugReplyFlow(step, detail = '') {
     if (!DEBUG_REPLY_FLOW) return;
     const msg = `[回复调试] ${step}${detail ? '｜' + detail : ''}`;
@@ -3616,6 +3622,7 @@ function appendPartnerMessageToCurrentChat(partnerId, message) {
 function simulateReply() {
     const replyPartnerId = state.currentPartnerId;
     debugReplyFlow('① 开始 simulateReply', `partnerId=${replyPartnerId}, current=${state.currentPartnerId}, chatLoader=${!!chatLoader}, loaderPartner=${chatLoader?.partnerId || '无'}`);
+    forceReplyDebugAlert('1/6 回复任务启动', `simulateReply 已启动\npartnerId=${replyPartnerId}\ncurrentPartnerId=${state.currentPartnerId}\nchatLoader=${!!chatLoader}\nloaderPartner=${chatLoader?.partnerId || '无'}`);
     showPartnerTyping(replyPartnerId);
     debugReplyFlow('② 正在输入已触发', `partnerId=${replyPartnerId}`);
     // 如果字卡库为空，不回复
@@ -3714,6 +3721,7 @@ function simulateReply() {
         debugReplyFlow('④ 已安排回复定时器', `index=${i+1}/${replyCount}, delay=${Math.round(delay)}ms, partnerId=${replyPartnerId}`);
         setTimeout(async function() {
             debugReplyFlow('⑤ 定时器已触发', `index=${i+1}/${replyCount}, current=${state.currentPartnerId}, loaderPartner=${chatLoader?.partnerId || '无'}, destroyed=${!!chatLoader?.isDestroyed}`);
+            forceReplyDebugAlert('2/6 定时器触发', `第 ${i+1}/${replyCount} 条回复\ncurrent=${state.currentPartnerId}\nloaderPartner=${chatLoader?.partnerId || '无'}\ndestroyed=${!!chatLoader?.isDestroyed}`);
             debugReplyFlow('⑥ 开始生成回复', `partnerId=${replyPartnerId}`);
             const replyContent = await generateReplyContent(replyPartnerId);
             debugReplyFlow('⑦ 回复生成完成', replyContent ? `有内容=${JSON.stringify(replyContent).slice(0,80)}` : '无内容');
@@ -3731,16 +3739,20 @@ function simulateReply() {
                     alert(`[回复调试] ${title}\n${detail}`);
                 };
                 debugMsg('⑨ DB 保存成功', `messageId=${replyId}, current=${state.currentPartnerId}, loaderPartner=${chatLoader?.partnerId || '无'}, destroyed=${!!chatLoader?.isDestroyed}`);
+                forceReplyDebugAlert('3/6 DB 保存成功', `messageId=${replyId}\npartnerId=${replyPartnerId}`);
                 const chatScreen = document.getElementById('chatScreen');
                 const isCurrentPartner = state.currentPartnerId === replyPartnerId;
                 const isCurrentLoader = !!chatLoader && chatLoader.partnerId === replyPartnerId;
                 const isLoaderAlive = !!chatLoader && !chatLoader.isDestroyed;
                 const isChatVisible = !!chatScreen && !chatScreen.classList.contains('hidden');
                 debugMsg('⑩ 检查实时输出条件', `current=${isCurrentPartner}, loaderPartner=${isCurrentLoader}, loaderAlive=${isLoaderAlive}, chatVisible=${isChatVisible}`);
+                forceReplyDebugAlert('4/6 实时输出条件', `currentPartner=${isCurrentPartner ? 'YES' : 'NO'}\nloaderPartner=${isCurrentLoader ? 'YES' : 'NO'}\nloaderAlive=${isLoaderAlive ? 'YES' : 'NO'}\nchatVisible=${isChatVisible ? 'YES' : 'NO'}`);
                 if (isCurrentPartner && isCurrentLoader && isLoaderAlive) {
                     debugMsg('⑪ 准备 appendMessage', `messageId=${replyId}`);
+                    forceReplyDebugAlert('5/6 准备 appendMessage', `messageId=${replyId}`);
                     chatLoader.appendMessage(replyMsg);
                     debugMsg('⑫ appendMessage 已执行', `messageId=${replyId}`);
+                    forceReplyDebugAlert('6/6 appendMessage 已执行', `messageId=${replyId}\n当前消息数量=${chatLoader?.allMessages?.length ?? 'unknown'}`);
                     if (isChatVisible) {
                         debugMsg('⑬ 准备 clearUnread', `partnerId=${replyPartnerId}`);
                         clearUnread();
