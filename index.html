@@ -2699,12 +2699,47 @@ async function refreshCurrentChatIfNeeded(partnerId) {
         }
 
         appendMessage(message) {
+        alert('【appendMessage 内部诊断 ①】\\n\\n已进入 ChatLoader.appendMessage()' +
+              '\\nmessage.id = ' + (message && message.id != null ? message.id : 'NULL') +
+              '\\nsender = ' + (message && message.sender != null ? message.sender : 'NULL') +
+              '\\ntext = ' + (message && (message.text || message.content) ? String(message.text || message.content).slice(0, 120) : 'EMPTY'));
+
+        const debugContainerBefore = this.container || this.messagesContainer ||
+                                      document.getElementById('chatMessages') ||
+                                      document.querySelector('#chatScreen .messages') ||
+                                      document.querySelector('.chat-messages');
+
+        alert('【appendMessage 内部诊断 ②】\\n\\n消息容器 = ' +
+              (debugContainerBefore ? '存在' : '不存在') +
+              '\\n当前 children = ' + (debugContainerBefore ? debugContainerBefore.children.length : 'N/A'));
+
     this.allMessages.push(message);
     const el = this.createMessageElement(message);
+        alert('【appendMessage 内部诊断 ③】\\n\\n即将执行 DOM 插入操作');
     this.container.appendChild(el);
+        const debugContainerMid = this.container || this.messagesContainer ||
+                                    document.getElementById('chatMessages') ||
+                                    document.querySelector('#chatScreen .messages') ||
+                                    document.querySelector('.chat-messages');
+        const debugLastMid = debugContainerMid && debugContainerMid.lastElementChild;
+        alert('【appendMessage 内部诊断 ④】\\n\\nDOM 插入调用已执行' +
+              '\\n当前 children = ' + (debugContainerMid ? debugContainerMid.children.length : 'N/A') +
+              '\\n最后一个节点存在 = ' + (debugLastMid ? 'YES' : 'NO') +
+              '\\n最后一个节点文本 = ' + (debugLastMid ? debugLastMid.textContent.slice(0, 120) : 'N/A'));
     // 延迟滚动，给图片加载留时间
     setTimeout(() => this.scrollToBottom(), 150);
     this._setCache(this.allMessages);
+
+        const debugContainerAfter = this.container || this.messagesContainer ||
+                                     document.getElementById('chatMessages') ||
+                                     document.querySelector('#chatScreen .messages') ||
+                                     document.querySelector('.chat-messages');
+        const debugLast = debugContainerAfter && debugContainerAfter.lastElementChild;
+        alert('【appendMessage 内部诊断 ⑤】\\n\\nappendMessage() 即将结束' +
+              '\\n当前 children = ' + (debugContainerAfter ? debugContainerAfter.children.length : 'N/A') +
+              '\\n最后一个节点存在 = ' + (debugLast ? 'YES' : 'NO') +
+              '\\n最后一个节点 class = ' + (debugLast ? debugLast.className : 'N/A') +
+              '\\n最后一个节点文本 = ' + (debugLast ? debugLast.textContent.slice(0, 120) : 'N/A'));
 }
 
         formatMessageTime(ts) {
