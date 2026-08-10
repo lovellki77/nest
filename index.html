@@ -3685,6 +3685,88 @@ function simulateReply() {
                     replyMsg.id = replyId;
                     if (state.currentPartnerId === replyPartnerId && chatLoader) {
                         chatLoader.appendMessage(replyMsg);
+                        // ===== 非阻塞时序诊断：不改变业务逻辑 =====
+                        (() => {
+                            const panel = document.createElement('div');
+                            panel.id = 'replyTimingDebugPanel';
+                            panel.style.cssText =
+                                'position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;' +
+                                'background:rgba(0,0,0,.92);color:#fff;padding:10px;border-radius:10px;' +
+                                'font:12px/1.45 monospace;max-height:45vh;overflow:auto;white-space:pre-wrap;';
+                            document.body.appendChild(panel);
+
+                            const rows = [];
+                            const startedAt = performance.now();
+
+                            const getState = (label) => {
+                                const container = document.getElementById('chatMessages') ||
+                                    document.querySelector('#chatScreen .messages') ||
+                                    document.querySelector('.chat-messages');
+                                const screen = document.getElementById('chatScreen');
+                                const last = container ? container.lastElementChild : null;
+                                const cs = last ? getComputedStyle(last) : null;
+                                const rect = last ? last.getBoundingClientRect() : null;
+
+                                rows.push(
+                                    label +
+                                    '\n  elapsed=' + Math.round(performance.now() - startedAt) + 'ms' +
+                                    '\n  DOM=' + (last ? 'EXISTS' : 'MISSING') +
+                                    '\n  children=' + (container ? container.children.length : 'N/A') +
+                                    '\n  display=' + (cs ? cs.display : 'N/A') +
+                                    '\n  visibility=' + (cs ? cs.visibility : 'N/A') +
+                                    '\n  opacity=' + (cs ? cs.opacity : 'N/A') +
+                                    '\n  rect=' + (rect ? (Math.round(rect.width) + 'x' + Math.round(rect.height)) : 'N/A') +
+                                    '\n  screenHidden=' + (screen ? screen.classList.contains('hidden') : 'N/A') +
+                                    '\n  loaderPartner=' + (chatLoader ? chatLoader.partnerId : 'NULL')
+                                );
+
+                                panel.textContent =
+                                    '【普通回复·真实时序诊断】\\n' +
+                                    'replyId=' + replyId + '\\n\\n' +
+                                    rows.join('\\n\\n') +
+                                    '\\n\\n等待 500ms 后最终判断……';
+                            };
+
+                            getState('① appendMessage 后立即');
+
+                            requestAnimationFrame(() => {
+                                getState('② 下一帧');
+                            });
+
+                            setTimeout(() => {
+                                getState('③ 50ms');
+                            }, 50);
+
+                            setTimeout(() => {
+                                getState('④ 100ms');
+                            }, 100);
+
+                            setTimeout(() => {
+                                getState('⑤ 500ms');
+
+                                const container = document.getElementById('chatMessages') ||
+                                    document.querySelector('#chatScreen .messages') ||
+                                    document.querySelector('.chat-messages');
+                                const last = container ? container.lastElementChild : null;
+                                const cs = last ? getComputedStyle(last) : null;
+                                const rect = last ? last.getBoundingClientRect() : null;
+
+                                let result;
+                                if (!last) {
+                                    result = '结论：DOM 在 500ms 内消失/不存在。重点查后续 render/清空流程。';
+                                } else if (!cs || cs.display === 'none' || cs.visibility === 'hidden' ||
+                                           Number(cs.opacity) === 0 || !rect || rect.width === 0 || rect.height === 0) {
+                                    result = '结论：DOM 仍存在，但在 500ms 时不可见。重点查 UI 状态/CSS/容器。';
+                                } else {
+                                    result = '结论：DOM 500ms 内一直存在且可见。重点继续查滚动/遮挡/页面状态。';
+                                }
+
+                                panel.textContent += '\n\n' + result +
+                                    '\n\n点击此面板即可关闭。';
+                                panel.onclick = () => panel.remove();
+                            }, 500);
+                        })();
+
                         if (!document.getElementById('chatScreen').classList.contains('hidden')) {
                             clearUnread();
                         }
