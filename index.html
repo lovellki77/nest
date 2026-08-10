@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
     <title>梦语</title>
-<!-- v6：干净事件驱动；主动消息保留10秒前台兜底；无5秒ChatSync -->
+<!-- v6：干净事件驱动；无5秒ChatSync；主动消息仅使用原有定时器 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
@@ -3162,46 +3162,36 @@ if (!newState.settings.autoReply) {
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
         var nav = document.querySelector('[data-screen="'+name+'"]');
         if (nav) nav.classList.add('active');
-        if (name === 'main') {  renderMain(); }
+        if (name === 'main') renderMain();
         if (name === 'chat') { renderChat(); clearUnread(); }
-        if (name === 'settings') {  renderSettingsMain(); }
-        // 导航切换本身也必须刷新未读徽标，不能依赖再次进入聊天页。
-        setTimeout(updateBadge, 0);
-        setTimeout(updateBadge, 250);
-        setTimeout(updateBadge, 800);
+        if (name === 'settings') renderSettingsMain();
         hideContextMenu();
     }
 
     function sortedPartners() { return state.partners.slice().sort((a,b) => a.pinned !== b.pinned ? (a.pinned ? -1 : 1) : a.order - b.order); }
 
-    let __badgeRefreshSeq = 0;
-    async function updateBadge() {
-        const seq = ++__badgeRefreshSeq;
+    function updateBadge() {
         var btn = document.getElementById('chatNavBtn');
-        if (!btn) return;
-        let total = 0;
-        const partners = Array.isArray(state.partners) ? state.partners : [];
-        try {
-            const counts = await Promise.all(partners.map(async function(partner) {
-                const lastRead = (state._lastRead && state._lastRead[partner.id]) || 0;
-                const msgs = await loadMessagesFromDB(partner.id, 9999, 0);
-                let count = 0;
-                for (const msg of msgs) {
-                    if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > lastRead) count++;
+        var existing = btn.querySelectorAll('.nav-badge');
+        existing.forEach(function(el) { el.remove(); });
+        (async function() {
+            let total = 0;
+            for (var pid in state._lastRead) {
+                const msgs = await loadMessagesFromDB(pid, 9999, 0);
+                for (var j = 0; j < msgs.length; j++) {
+                    var msg = msgs[j];
+                    if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > (state._lastRead[pid] || 0)) {
+                        total++;
+                    }
                 }
-                return count;
-            }));
-            total = counts.reduce((a, b) => a + b, 0);
-            // 只让最新一次刷新结果改 DOM，避免异步查询先后顺序覆盖新状态。
-            if (seq !== __badgeRefreshSeq || !document.body.contains(btn)) return;
-            btn.querySelectorAll('.nav-badge').forEach(function(el) { el.remove(); });
+            }
             if (total > 0) {
                 var b = document.createElement('span');
                 b.className = 'nav-badge';
                 b.textContent = total > 99 ? '99+' : total;
                 btn.appendChild(b);
             }
-        } catch(e) { console.warn('[Badge] 刷新未读失败:', e); }
+        })();
     }
 
     function clearUnread() {
@@ -3585,7 +3575,6 @@ function completePartnerReply(partnerId) {
     if(window.__typingClearTimers && window.__typingClearTimers[partnerId]) { clearTimeout(window.__typingClearTimers[partnerId]); delete window.__typingClearTimers[partnerId]; }
     hidePartnerTyping(partnerId);
     renderTypingPartners();
-    updateBadge();
 }
 
 // 当前版本采用纯事件驱动聊天更新：
@@ -3655,7 +3644,6 @@ function simulateReply() {
                         }
                     }
                     completePartnerReply(replyPartnerId);
-                    updateBadge();
                     saveState();
                 } else {
                     completePartnerReply(replyPartnerId);
@@ -7458,21 +7446,6 @@ class KeepAliveManager {
         setInterval(fetchAndUpdateWeather, 30 * 60 * 1000);
         startAutoOnlineToggle();
         restartAutoMessage();
-        if (window.__autoMessageHeartbeat) clearInterval(window.__autoMessageHeartbeat);
-        window.__autoMessageHeartbeat = setInterval(function() {
-            if (document.hidden) return;
-            if (state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !window.__autoMessageRunning) {
-                // 只清掉已经到期的旧 timer；正常 timer 尚未到期时完全不干预。
-                if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
-                runScheduledAutoMessage();
-            }
-        }, 10000);
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden && state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !window.__autoMessageRunning) {
-                if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
-                runScheduledAutoMessage();
-            }
-        });
 
         const todayStr = new Date().toDateString();
         if (state.stepsDate !== todayStr) {
