@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
     <title>梦语</title>
-<!-- v6：干净事件驱动；主动消息保留10秒前台兜底；无5秒ChatSync -->
+<!-- v6：干净事件驱动；无5秒ChatSync；主动消息仅使用原有定时器 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
@@ -2699,47 +2699,12 @@ async function refreshCurrentChatIfNeeded(partnerId) {
         }
 
         appendMessage(message) {
-        alert('【appendMessage 内部诊断 ①】\\n\\n已进入 ChatLoader.appendMessage()' +
-              '\\nmessage.id = ' + (message && message.id != null ? message.id : 'NULL') +
-              '\\nsender = ' + (message && message.sender != null ? message.sender : 'NULL') +
-              '\\ntext = ' + (message && (message.text || message.content) ? String(message.text || message.content).slice(0, 120) : 'EMPTY'));
-
-        const debugContainerBefore = this.container || this.messagesContainer ||
-                                      document.getElementById('chatMessages') ||
-                                      document.querySelector('#chatScreen .messages') ||
-                                      document.querySelector('.chat-messages');
-
-        alert('【appendMessage 内部诊断 ②】\\n\\n消息容器 = ' +
-              (debugContainerBefore ? '存在' : '不存在') +
-              '\\n当前 children = ' + (debugContainerBefore ? debugContainerBefore.children.length : 'N/A'));
-
     this.allMessages.push(message);
     const el = this.createMessageElement(message);
-        alert('【appendMessage 内部诊断 ③】\\n\\n即将执行 DOM 插入操作');
     this.container.appendChild(el);
-        const debugContainerMid = this.container || this.messagesContainer ||
-                                    document.getElementById('chatMessages') ||
-                                    document.querySelector('#chatScreen .messages') ||
-                                    document.querySelector('.chat-messages');
-        const debugLastMid = debugContainerMid && debugContainerMid.lastElementChild;
-        alert('【appendMessage 内部诊断 ④】\\n\\nDOM 插入调用已执行' +
-              '\\n当前 children = ' + (debugContainerMid ? debugContainerMid.children.length : 'N/A') +
-              '\\n最后一个节点存在 = ' + (debugLastMid ? 'YES' : 'NO') +
-              '\\n最后一个节点文本 = ' + (debugLastMid ? debugLastMid.textContent.slice(0, 120) : 'N/A'));
     // 延迟滚动，给图片加载留时间
     setTimeout(() => this.scrollToBottom(), 150);
     this._setCache(this.allMessages);
-
-        const debugContainerAfter = this.container || this.messagesContainer ||
-                                     document.getElementById('chatMessages') ||
-                                     document.querySelector('#chatScreen .messages') ||
-                                     document.querySelector('.chat-messages');
-        const debugLast = debugContainerAfter && debugContainerAfter.lastElementChild;
-        alert('【appendMessage 内部诊断 ⑤】\\n\\nappendMessage() 即将结束' +
-              '\\n当前 children = ' + (debugContainerAfter ? debugContainerAfter.children.length : 'N/A') +
-              '\\n最后一个节点存在 = ' + (debugLast ? 'YES' : 'NO') +
-              '\\n最后一个节点 class = ' + (debugLast ? debugLast.className : 'N/A') +
-              '\\n最后一个节点文本 = ' + (debugLast ? debugLast.textContent.slice(0, 120) : 'N/A'));
 }
 
         formatMessageTime(ts) {
@@ -2899,9 +2864,17 @@ if (placeholder) {
             });
             if (updates.length > 0) {
                 await Promise.all(updates).catch(e => console.error('补标记已读失败', e));
-                this.container.innerHTML = '';
-                this.renderAll();
-                this.scrollToBottom();
+                // 不再 renderAll()。初始化阶段如果刚好有实时回复追加进来，
+                // 全量重绘会把刚追加的 DOM 瞬间覆盖掉，表现为“切换伴侣后才出现”。
+                // 这里只更新现有已读回执，保持实时消息 DOM 不被覆盖。
+                this.container.querySelectorAll('.read-receipt').forEach(el => {
+                    el.classList.add('read');
+                    const icon = el.querySelector('i');
+                    if (icon) {
+                        icon.classList.remove('fa-check');
+                        icon.classList.add('fa-check-double');
+                    }
+                });
                 this._setCache(this.allMessages);
             }
         }
@@ -3197,46 +3170,36 @@ if (!newState.settings.autoReply) {
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
         var nav = document.querySelector('[data-screen="'+name+'"]');
         if (nav) nav.classList.add('active');
-        if (name === 'main') {  renderMain(); }
+        if (name === 'main') renderMain();
         if (name === 'chat') { renderChat(); clearUnread(); }
-        if (name === 'settings') {  renderSettingsMain(); }
-        // 导航切换本身也必须刷新未读徽标，不能依赖再次进入聊天页。
-        setTimeout(updateBadge, 0);
-        setTimeout(updateBadge, 250);
-        setTimeout(updateBadge, 800);
+        if (name === 'settings') renderSettingsMain();
         hideContextMenu();
     }
 
     function sortedPartners() { return state.partners.slice().sort((a,b) => a.pinned !== b.pinned ? (a.pinned ? -1 : 1) : a.order - b.order); }
 
-    let __badgeRefreshSeq = 0;
-    async function updateBadge() {
-        const seq = ++__badgeRefreshSeq;
+    function updateBadge() {
         var btn = document.getElementById('chatNavBtn');
-        if (!btn) return;
-        let total = 0;
-        const partners = Array.isArray(state.partners) ? state.partners : [];
-        try {
-            const counts = await Promise.all(partners.map(async function(partner) {
-                const lastRead = (state._lastRead && state._lastRead[partner.id]) || 0;
-                const msgs = await loadMessagesFromDB(partner.id, 9999, 0);
-                let count = 0;
-                for (const msg of msgs) {
-                    if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > lastRead) count++;
+        var existing = btn.querySelectorAll('.nav-badge');
+        existing.forEach(function(el) { el.remove(); });
+        (async function() {
+            let total = 0;
+            for (var pid in state._lastRead) {
+                const msgs = await loadMessagesFromDB(pid, 9999, 0);
+                for (var j = 0; j < msgs.length; j++) {
+                    var msg = msgs[j];
+                    if (msg.sender !== 'user' && msg.sender !== 'system' && msg.timestamp > (state._lastRead[pid] || 0)) {
+                        total++;
+                    }
                 }
-                return count;
-            }));
-            total = counts.reduce((a, b) => a + b, 0);
-            // 只让最新一次刷新结果改 DOM，避免异步查询先后顺序覆盖新状态。
-            if (seq !== __badgeRefreshSeq || !document.body.contains(btn)) return;
-            btn.querySelectorAll('.nav-badge').forEach(function(el) { el.remove(); });
+            }
             if (total > 0) {
                 var b = document.createElement('span');
                 b.className = 'nav-badge';
                 b.textContent = total > 99 ? '99+' : total;
                 btn.appendChild(b);
             }
-        } catch(e) { console.warn('[Badge] 刷新未读失败:', e); }
+        })();
     }
 
     function clearUnread() {
@@ -3620,12 +3583,24 @@ function completePartnerReply(partnerId) {
     if(window.__typingClearTimers && window.__typingClearTimers[partnerId]) { clearTimeout(window.__typingClearTimers[partnerId]); delete window.__typingClearTimers[partnerId]; }
     hidePartnerTyping(partnerId);
     renderTypingPartners();
-    updateBadge();
 }
 
 // 当前版本采用纯事件驱动聊天更新：
 // 不再使用 5 秒 ChatSync 轮询。消息生成后直接更新当前聊天，
 // IndexedDB 只负责持久化；这样避免轮询与消息写入/渲染产生竞争。
+
+// ===================== 当前聊天实时消息入口 =====================
+// 仅负责把已经写入 DB 的伴侣消息立即追加到当前正在查看的聊天。
+// 不创建轮询/心跳，也不负责非当前伴侣的消息加载。
+function appendPartnerMessageToCurrentChat(partnerId, message) {
+    const chatScreen = document.getElementById('chatScreen');
+    if (!chatLoader || chatLoader.isDestroyed) return false;
+    if (chatLoader.partnerId !== partnerId) return false;
+    if (state.currentPartnerId !== partnerId) return false;
+    if (!chatScreen || chatScreen.classList.contains('hidden')) return false;
+    chatLoader.appendMessage(message);
+    return true;
+}
 
 // ===================== 模拟伴侣回复 =====================
 function simulateReply() {
@@ -3683,96 +3658,10 @@ function simulateReply() {
                     };
                     const replyId = await saveMessageToDB(replyPartnerId, replyMsg);
                     replyMsg.id = replyId;
-                    if (state.currentPartnerId === replyPartnerId && chatLoader) {
-                        chatLoader.appendMessage(replyMsg);
-                        // ===== 非阻塞时序诊断：不改变业务逻辑 =====
-                        (() => {
-                            const panel = document.createElement('div');
-                            panel.id = 'replyTimingDebugPanel';
-                            panel.style.cssText =
-                                'position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;' +
-                                'background:rgba(0,0,0,.92);color:#fff;padding:10px;border-radius:10px;' +
-                                'font:12px/1.45 monospace;max-height:45vh;overflow:auto;white-space:pre-wrap;';
-                            document.body.appendChild(panel);
-
-                            const rows = [];
-                            const startedAt = performance.now();
-
-                            const getState = (label) => {
-                                const container = document.getElementById('chatMessages') ||
-                                    document.querySelector('#chatScreen .messages') ||
-                                    document.querySelector('.chat-messages');
-                                const screen = document.getElementById('chatScreen');
-                                const last = container ? container.lastElementChild : null;
-                                const cs = last ? getComputedStyle(last) : null;
-                                const rect = last ? last.getBoundingClientRect() : null;
-
-                                rows.push(
-                                    label +
-                                    '\n  elapsed=' + Math.round(performance.now() - startedAt) + 'ms' +
-                                    '\n  DOM=' + (last ? 'EXISTS' : 'MISSING') +
-                                    '\n  children=' + (container ? container.children.length : 'N/A') +
-                                    '\n  display=' + (cs ? cs.display : 'N/A') +
-                                    '\n  visibility=' + (cs ? cs.visibility : 'N/A') +
-                                    '\n  opacity=' + (cs ? cs.opacity : 'N/A') +
-                                    '\n  rect=' + (rect ? (Math.round(rect.width) + 'x' + Math.round(rect.height)) : 'N/A') +
-                                    '\n  screenHidden=' + (screen ? screen.classList.contains('hidden') : 'N/A') +
-                                    '\n  loaderPartner=' + (chatLoader ? chatLoader.partnerId : 'NULL')
-                                );
-
-                                panel.textContent =
-                                    '【普通回复·真实时序诊断】\\n' +
-                                    'replyId=' + replyId + '\\n\\n' +
-                                    rows.join('\\n\\n') +
-                                    '\\n\\n等待 500ms 后最终判断……';
-                            };
-
-                            getState('① appendMessage 后立即');
-
-                            requestAnimationFrame(() => {
-                                getState('② 下一帧');
-                            });
-
-                            setTimeout(() => {
-                                getState('③ 50ms');
-                            }, 50);
-
-                            setTimeout(() => {
-                                getState('④ 100ms');
-                            }, 100);
-
-                            setTimeout(() => {
-                                getState('⑤ 500ms');
-
-                                const container = document.getElementById('chatMessages') ||
-                                    document.querySelector('#chatScreen .messages') ||
-                                    document.querySelector('.chat-messages');
-                                const last = container ? container.lastElementChild : null;
-                                const cs = last ? getComputedStyle(last) : null;
-                                const rect = last ? last.getBoundingClientRect() : null;
-
-                                let result;
-                                if (!last) {
-                                    result = '结论：DOM 在 500ms 内消失/不存在。重点查后续 render/清空流程。';
-                                } else if (!cs || cs.display === 'none' || cs.visibility === 'hidden' ||
-                                           Number(cs.opacity) === 0 || !rect || rect.width === 0 || rect.height === 0) {
-                                    result = '结论：DOM 仍存在，但在 500ms 时不可见。重点查 UI 状态/CSS/容器。';
-                                } else {
-                                    result = '结论：DOM 500ms 内一直存在且可见。重点继续查滚动/遮挡/页面状态。';
-                                }
-
-                                panel.textContent += '\n\n' + result +
-                                    '\n\n点击此面板即可关闭。';
-                                panel.onclick = () => panel.remove();
-                            }, 500);
-                        })();
-
-                        if (!document.getElementById('chatScreen').classList.contains('hidden')) {
-                            clearUnread();
-                        }
+                    if (appendPartnerMessageToCurrentChat(replyPartnerId, replyMsg)) {
+                        clearUnread();
                     }
                     completePartnerReply(replyPartnerId);
-                    updateBadge();
                     saveState();
                 } else {
                     completePartnerReply(replyPartnerId);
@@ -3839,7 +3728,6 @@ function simulateReply() {
 
     // 发送消息（用户）
     window.sendMessage = async function() {
-        alert('【正常文字调试 ①】sendMessage() 已进入\n\n准备开始追踪正常文字 → 伴侣回复的完整链路。\n\n点击确定继续。');
         var inp = document.getElementById('chatInput');
         var text = inp.value.trim();
         if (!text || text.length > 500) return;
@@ -3856,7 +3744,6 @@ function simulateReply() {
         updateCharCount();
         try {
             const savedId = await saveMessageToDB(partnerId, messageData);
-            alert('【正常文字调试 ②】用户消息已成功写入 DB\n\npartnerId = ' + partnerId + '\nmessageId = ' + savedId + '\n\n即将进入伴侣回复调度。\n\n点击确定继续。');
             messageData.id = savedId;
             state._stats.totalSent++;
             saveState();
@@ -3873,7 +3760,6 @@ function simulateReply() {
         var readDelay = Math.min(2000, Math.max(500, totalDelay * 0.3));
         var replyDelay = totalDelay - readDelay;
         setTimeout(async function() {
-            alert('【正常文字调试 ③】readDelay 定时器已触发\n\n说明：正常文字发送后的异步回复流程已经开始执行。\n\npartnerId = ' + partnerId + '\ncurrentPartnerId = ' + state.currentPartnerId + '\n\n点击确定继续。');
             if (chatLoader && state.currentPartnerId === partnerId) {
                 const updatePromises = [];
                 chatLoader.allMessages.forEach(m => {
@@ -3890,108 +3776,23 @@ function simulateReply() {
                 Promise.all(updatePromises).catch(e => console.error('更新已读状态失败', e));
             }
             showPartnerTyping(partnerId);
-            alert('【正常文字调试 ④】正在输入已触发\n\nshowPartnerTyping(' + partnerId + ') 已执行。\n\n接下来等待真正的回复定时器。\n\n点击确定继续。');
         }, readDelay);
         setTimeout(async function() {
-    alert('【普通回复调试 ⑥】\n\n单条回复定时器已触发\n即将进入 generateReplyContent()');
     var count = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
     for (var j = 0; j < count; j++) {
         (function(idx) {
             setTimeout(async function() {
                 try {
-                alert('【正常文字调试 ⑥】单条回复定时器已真正触发\n\nidx = ' + idx + '\npartnerId = ' + partnerId + '\n\n现在开始调用 generateReplyContent()。\n\n点击确定继续。');
-                alert('【普通回复调试 ⑦】\n\ngenerateReplyContent() 开始执行\npartnerId = ' + partnerId);
                 const replyContent = await generateReplyContent(partnerId);
-
-                alert('【普通回复调试 ⑧】\n\ngenerateReplyContent() 已返回\nreplyContent = ' + (replyContent ? 'YES' : 'NO') +
-                      '\n\n' + (replyContent ? JSON.stringify(replyContent).slice(0, 300) : '没有生成回复内容'));
-
                 if (replyContent) {
-                    alert('【普通回复调试 ⑨】\n\n准备执行 saveMessageToDB()');
                     const replyMsg = { sender: partnerId, timestamp: Date.now(), ...replyContent };
                     const replyId = await saveMessageToDB(partnerId, replyMsg);
                     replyMsg.id = replyId;
-
-                    alert('【普通回复调试 ⑩】\n\nsaveMessageToDB() 成功\nmessageId = ' + replyId);
-
-                    const chatScreenEl = document.getElementById('chatScreen');
-                    const chatVisible = !!chatScreenEl && !chatScreenEl.classList.contains('hidden');
-                    const loaderExists = !!chatLoader;
-                    const loaderPartner = loaderExists ? chatLoader.partnerId : 'NULL';
-                    const loaderDestroyed = loaderExists ? !!chatLoader.destroyed : true;
-                    const currentMatch = state.currentPartnerId === partnerId;
-                    const loaderMatch = loaderExists && chatLoader.partnerId === partnerId;
-                    const aliveMatch = loaderExists && !loaderDestroyed;
-
-                    alert('【普通回复调试 ⑪】\n\nappendMessage 条件检查\n' +
-                          'currentPartner = ' + (currentMatch ? 'YES' : 'NO') + '\n' +
-                          'chatLoader = ' + (loaderExists ? 'YES' : 'NO') + '\n' +
-                          'loaderPartner = ' + loaderPartner + '\n' +
-                          'loaderMatch = ' + (loaderMatch ? 'YES' : 'NO') + '\n' +
-                          'loaderAlive = ' + (aliveMatch ? 'YES' : 'NO') + '\n' +
-                          'chatVisible = ' + (chatVisible ? 'YES' : 'NO'));
-
-                    if (currentMatch && loaderExists && loaderMatch && aliveMatch) {
-                        alert('【普通回复调试 ⑫】\n\n即将执行 chatLoader.appendMessage()');
-                        chatLoader.appendMessage(replyMsg);
-
-                        const debugDomContainer = document.getElementById('chatMessages') ||
-                                                  document.querySelector('#chatScreen .messages') ||
-                                                  document.querySelector('.chat-messages');
-                        const debugMessageCount = debugDomContainer ? debugDomContainer.children.length : 'CONTAINER_NOT_FOUND';
-                        const debugLatestDom = debugDomContainer
-                            ? !!debugDomContainer.querySelector('[data-message-id="' + replyId + '"]')
-                            : false;
-
-                        alert('【DOM诊断 ①｜append 后立即】\\n\\n' +
-                              'chatLoader.messages = ' + (chatLoader.messages ? chatLoader.messages.length : 'N/A') + '\\n' +
-                              'DOM消息数量 = ' + debugMessageCount + '\\n' +
-                              '最新消息DOM存在 = ' + (debugLatestDom ? 'YES' : 'NO'));
-
-                        requestAnimationFrame(() => {
-                            const c2 = document.getElementById('chatMessages') ||
-                                       document.querySelector('#chatScreen .messages') ||
-                                       document.querySelector('.chat-messages');
-                            const n2 = c2 ? c2.children.length : 'CONTAINER_NOT_FOUND';
-                            const e2 = c2 ? !!c2.querySelector('[data-message-id="' + replyId + '"]') : false;
-
-                            alert('【DOM诊断 ②｜下一帧】\\n\\n' +
-                                  'DOM消息数量 = ' + n2 + '\\n' +
-                                  '最新消息DOM存在 = ' + (e2 ? 'YES' : 'NO'));
-
-                            setTimeout(() => {
-                                const c3 = document.getElementById('chatMessages') ||
-                                           document.querySelector('#chatScreen .messages') ||
-                                           document.querySelector('.chat-messages');
-                                const n3 = c3 ? c3.children.length : 'CONTAINER_NOT_FOUND';
-                                const e3 = c3 ? !!c3.querySelector('[data-message-id="' + replyId + '"]') : false;
-
-                                alert('【DOM诊断 ③｜100ms后】\\n\\n' +
-                                      'DOM消息数量 = ' + n3 + '\\n' +
-                                      '最新消息DOM存在 = ' + (e3 ? 'YES' : 'NO'));
-
-                                let result;
-                                if (!debugLatestDom) {
-                                    result = '情况 D：appendMessage() 后立即就没有找到最新消息DOM';
-                                } else if (!e2) {
-                                    result = '情况 B：append 后有DOM，但下一帧消失，疑似立即被重新渲染/移除';
-                                } else if (!e3) {
-                                    result = '情况 C：下一帧仍有DOM，但约100ms后消失，疑似后续异步流程覆盖';
-                                } else {
-                                    result = '情况 A：①②③均存在，DOM一直存在；需要继续检查可见性/布局/其他覆盖因素';
-                                }
-
-                                alert('【DOM诊断 ④｜最终判断】\\n\\n' + result);
-                            }, 100);
-                        });
-
-                        alert('【普通回复调试 ⑬】\\n\\nchatLoader.appendMessage() 已执行完成');
-                        if (chatVisible) { clearUnread(); }
-                    } else {
-                        alert('【普通回复调试 ⑫】\n\nappendMessage() 被跳过\n原因：实时输出条件未全部满足');
+                    notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
+                    if (appendPartnerMessageToCurrentChat(partnerId, replyMsg)) {
+                        clearUnread();
                     }
                 }
-
                 updateBadge();
                 saveState();
 
@@ -4000,10 +3801,7 @@ function simulateReply() {
                 if (idx === count - 1) {
                     checkAndSendAutoReply(partnerId);
                 }
-                } catch(e) {
-                    alert('【普通回复调试 ERROR】\n\n回复链路发生异常：\n' + (e && e.stack ? e.stack : e));
-                    console.error('[REPLY] reply generation failed:',e);
-                }
+                } catch(e) { console.error('[REPLY] reply generation failed:',e); }
                 finally { if (idx === count - 1) completePartnerReply(partnerId); }
             }, idx * 1200);
         })(j);
@@ -4056,7 +3854,6 @@ function simulateReply() {
         }, readDelay);
         setTimeout(async function() {
             var count = Math.random() < 0.7 ? 1 : (Math.random() < 0.9 ? 2 : 3);
-            alert('【正常文字调试 ⑤】回复调度定时器已触发\n\n本次预计回复数量 = ' + count + '\nreplyDelay = ' + Math.round(replyDelay) + 'ms\npartnerId = ' + partnerId + '\n\n即将进入 generateReplyContent()。\n\n点击确定继续。');
             for (var j = 0; j < count; j++) {
                 (function(idx) {
                     setTimeout(async function() {
@@ -4068,6 +3865,61 @@ function simulateReply() {
                             notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                             if (state.currentPartnerId === partnerId && chatLoader) {
                                 chatLoader.appendMessage(replyMsg);
+                        // ===== 仅保留最新诊断：4 个时序弹窗，不修改业务逻辑 =====
+                        (() => {
+                            const getInfo = () => {
+                                const container = document.getElementById('chatMessages') ||
+                                    document.querySelector('#chatScreen .messages') ||
+                                    document.querySelector('.chat-messages');
+                                const last = container ? container.lastElementChild : null;
+                                const cs = last ? getComputedStyle(last) : null;
+                                const rect = last ? last.getBoundingClientRect() : null;
+                                return {
+                                    dom: !!last,
+                                    children: container ? container.children.length : 'N/A',
+                                    display: cs ? cs.display : 'N/A',
+                                    visibility: cs ? cs.visibility : 'N/A',
+                                    opacity: cs ? cs.opacity : 'N/A',
+                                    size: rect ? (Math.round(rect.width) + 'x' + Math.round(rect.height)) : 'N/A'
+                                };
+                            };
+
+                            const format = (title, info) =>
+                                '【回复时序诊断】' + title +
+                                '\n\nDOM = ' + (info.dom ? '存在' : '不存在') +
+                                '\nchildren = ' + info.children +
+                                '\ndisplay = ' + info.display +
+                                '\nvisibility = ' + info.visibility +
+                                '\nopacity = ' + info.opacity +
+                                '\n尺寸 = ' + info.size;
+
+                            alert(format('① append 后立即', getInfo()));
+
+                            requestAnimationFrame(() => {
+                                alert(format('② 下一帧', getInfo()));
+                            });
+
+                            setTimeout(() => {
+                                alert(format('③ 100ms 后', getInfo()));
+                            }, 100);
+
+                            setTimeout(() => {
+                                const info = getInfo();
+                                let conclusion;
+                                if (!info.dom) {
+                                    conclusion = '④ 500ms 后：DOM 已消失 → 重点查后续重新渲染/清空流程。';
+                                } else if (info.display === 'none' ||
+                                           info.visibility === 'hidden' ||
+                                           Number(info.opacity) === 0 ||
+                                           info.size === '0x0') {
+                                    conclusion = '④ 500ms 后：DOM 仍存在但不可见 → 重点查页面状态/CSS。';
+                                } else {
+                                    conclusion = '④ 500ms 后：DOM 仍存在且可见 → 重点查滚动/遮挡/页面状态。';
+                                }
+                                alert('【回复时序诊断】④ 最终判断\n\n' + conclusion);
+                            }, 500);
+                        })();
+
                                 if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
                             }
                         }
@@ -6486,9 +6338,7 @@ async function runScheduledAutoMessage() {
         console.log('[MSG-PROACTIVE] saved', { partnerId: randomPartner.id, id: replyId });
         // 主动消息不显示“正在输入”，直接作为新消息到达。
         notifyBarkForPartnerMessage(randomPartner.id, replyMsg, 'partner_proactive');
-        if (randomPartner.id === state.currentPartnerId && chatLoader && chatLoader.partnerId === randomPartner.id && !document.getElementById('chatScreen').classList.contains('hidden')) {
-            chatLoader.appendMessage(replyMsg);
-        }
+        appendPartnerMessageToCurrentChat(randomPartner.id, replyMsg);
         await updateBadge();
         saveState();
     } catch (e) {
@@ -6544,8 +6394,7 @@ function restartAutoMessage() {
                 replyMsg.id = savedId;
                 notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
                 replyCount++;
-                if (state.currentPartnerId === partnerId && chatLoader) {
-                    chatLoader.appendMessage(replyMsg);
+                if (appendPartnerMessageToCurrentChat(partnerId, replyMsg)) {
                     chatLoader.scrollToBottom();
                 }
             }
@@ -7666,21 +7515,6 @@ class KeepAliveManager {
         setInterval(fetchAndUpdateWeather, 30 * 60 * 1000);
         startAutoOnlineToggle();
         restartAutoMessage();
-        if (window.__autoMessageHeartbeat) clearInterval(window.__autoMessageHeartbeat);
-        window.__autoMessageHeartbeat = setInterval(function() {
-            if (document.hidden) return;
-            if (state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !window.__autoMessageRunning) {
-                // 只清掉已经到期的旧 timer；正常 timer 尚未到期时完全不干预。
-                if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
-                runScheduledAutoMessage();
-            }
-        }, 10000);
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden && state.settings.autoMessageEnabled && window.__autoMessageDueAt && Date.now() >= window.__autoMessageDueAt && !window.__autoMessageRunning) {
-                if (autoMsgTimer) { clearTimeout(autoMsgTimer); autoMsgTimer = null; }
-                runScheduledAutoMessage();
-            }
-        });
 
         const todayStr = new Date().toDateString();
         if (state.stepsDate !== todayStr) {
