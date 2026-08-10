@@ -3819,55 +3819,63 @@ function simulateReply() {
                         alert('【普通回复调试 ⑫】\n\n即将执行 chatLoader.appendMessage()');
                         chatLoader.appendMessage(replyMsg);
                         (() => {
-                            const getInfo = () => {
-                                const container = document.getElementById('chatMessages') ||
-                                    document.querySelector('#chatScreen .messages') ||
-                                    document.querySelector('.chat-messages');
-                                const last = container ? container.lastElementChild : null;
-                                const cs = last ? getComputedStyle(last) : null;
-                                const rect = last ? last.getBoundingClientRect() : null;
-                                return {
-                                    dom: !!last,
-                                    children: container ? container.children.length : 'N/A',
-                                    display: cs ? cs.display : 'N/A',
-                                    visibility: cs ? cs.visibility : 'N/A',
-                                    opacity: cs ? cs.opacity : 'N/A',
-                                    size: rect ? (Math.round(rect.width) + 'x' + Math.round(rect.height)) : 'N/A'
-                                };
-                            };
-                            const fmt = (title, x) =>
-                                '【回复时序诊断】' + title +
-                                '\n\nDOM = ' + (x.dom ? '存在' : '不存在') +
-                                '\nchildren = ' + x.children +
-                                '\ndisplay = ' + x.display +
-                                '\nvisibility = ' + x.visibility +
-                                '\nopacity = ' + x.opacity +
-                                '\n尺寸 = ' + x.size;
+                            const container = document.getElementById('chatMessages') ||
+                                document.querySelector('#chatScreen .messages') ||
+                                document.querySelector('.chat-messages');
+                            const screen = document.getElementById('chatScreen');
+                            const last = container ? container.lastElementChild : null;
+                            const rect = last ? last.getBoundingClientRect() : null;
+                            const cRect = container ? container.getBoundingClientRect() : null;
+                            const cs = last ? getComputedStyle(last) : null;
+                            const screenCS = screen ? getComputedStyle(screen) : null;
 
-                            alert(fmt('① append 后立即', getInfo()));
+                            alert('【可见区域诊断】① 消息位置\n\n' +
+                                '消息存在 = ' + (last ? 'YES' : 'NO') +
+                                '\nrect.top = ' + (rect ? Math.round(rect.top) : 'N/A') +
+                                '\nrect.bottom = ' + (rect ? Math.round(rect.bottom) : 'N/A') +
+                                '\n消息高度 = ' + (rect ? Math.round(rect.height) : 'N/A') +
+                                '\nwindow.innerHeight = ' + window.innerHeight);
 
-                            requestAnimationFrame(() => {
-                                alert(fmt('② 下一帧', getInfo()));
-                            });
+                            alert('【可见区域诊断】② 聊天容器\n\n' +
+                                'container存在 = ' + (container ? 'YES' : 'NO') +
+                                '\nscrollTop = ' + (container ? container.scrollTop : 'N/A') +
+                                '\nscrollHeight = ' + (container ? container.scrollHeight : 'N/A') +
+                                '\nclientHeight = ' + (container ? container.clientHeight : 'N/A') +
+                                '\ncontainer.top = ' + (cRect ? Math.round(cRect.top) : 'N/A') +
+                                '\ncontainer.bottom = ' + (cRect ? Math.round(cRect.bottom) : 'N/A'));
 
-                            setTimeout(() => {
-                                alert(fmt('③ 100ms 后', getInfo()));
-                            }, 100);
+                            const inViewport = !!rect &&
+                                rect.bottom > 0 &&
+                                rect.top < window.innerHeight &&
+                                rect.height > 0;
 
-                            setTimeout(() => {
-                                const x = getInfo();
-                                let c;
-                                if (!x.dom) {
-                                    c = 'DOM 在 500ms 内消失/不存在 → 查后续重新渲染或清空。';
-                                } else if (x.display === 'none' || x.visibility === 'hidden' ||
-                                           Number(x.opacity) === 0 || x.size === '0x0') {
-                                    c = 'DOM 仍存在但不可见 → 查页面状态/CSS。';
-                                } else {
-                                    c = 'DOM 仍存在且可见 → 查滚动/遮挡/页面状态。';
-                                }
-                                alert('【回复时序诊断】④ 500ms 最终判断\n\n' + c);
-                            }, 500);
+                            const containerVisible = !!cRect &&
+                                cRect.bottom > 0 &&
+                                cRect.top < window.innerHeight &&
+                                cRect.height > 0 &&
+                                !!screen &&
+                                screenCS &&
+                                screenCS.display !== 'none' &&
+                                screenCS.visibility !== 'hidden';
+
+                            let conclusion;
+                            if (!last) {
+                                conclusion = '③ 最终判断：找不到消息 DOM。';
+                            } else if (!inViewport) {
+                                conclusion = '③ 最终判断：消息 DOM 存在，但不在当前视口内 → 重点查滚动位置。';
+                            } else if (!containerVisible) {
+                                conclusion = '③ 最终判断：消息在坐标范围内，但聊天容器/页面状态不可见 → 重点查页面状态。';
+                            } else if (container.scrollHeight > container.clientHeight &&
+                                       container.scrollTop + container.clientHeight < container.scrollHeight - 2) {
+                                conclusion = '③ 最终判断：聊天容器没有滚到底部 → 重点查自动滚动。';
+                            } else {
+                                conclusion = '③ 最终判断：消息与容器都在可见区域且容器状态正常 → 继续查遮挡/其他页面状态。';
+                            }
+
+                            alert(conclusion);
                         })();
+
+
 
 
                         const debugDomContainer = document.getElementById('chatMessages') ||
