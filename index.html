@@ -3817,7 +3817,58 @@ function simulateReply() {
                     if (currentMatch && loaderExists && loaderMatch && aliveMatch) {
                         alert('【普通回复调试 ⑫】\n\n即将执行 chatLoader.appendMessage()');
                         chatLoader.appendMessage(replyMsg);
-                        alert('【普通回复调试 ⑬】\n\nchatLoader.appendMessage() 已执行完成');
+
+                        const debugDomContainer = document.getElementById('chatMessages') ||
+                                                  document.querySelector('#chatScreen .messages') ||
+                                                  document.querySelector('.chat-messages');
+                        const debugMessageCount = debugDomContainer ? debugDomContainer.children.length : 'CONTAINER_NOT_FOUND';
+                        const debugLatestDom = debugDomContainer
+                            ? !!debugDomContainer.querySelector('[data-message-id="' + replyId + '"]')
+                            : false;
+
+                        alert('【DOM诊断 ①｜append 后立即】\\n\\n' +
+                              'chatLoader.messages = ' + (chatLoader.messages ? chatLoader.messages.length : 'N/A') + '\\n' +
+                              'DOM消息数量 = ' + debugMessageCount + '\\n' +
+                              '最新消息DOM存在 = ' + (debugLatestDom ? 'YES' : 'NO'));
+
+                        requestAnimationFrame(() => {
+                            const c2 = document.getElementById('chatMessages') ||
+                                       document.querySelector('#chatScreen .messages') ||
+                                       document.querySelector('.chat-messages');
+                            const n2 = c2 ? c2.children.length : 'CONTAINER_NOT_FOUND';
+                            const e2 = c2 ? !!c2.querySelector('[data-message-id="' + replyId + '"]') : false;
+
+                            alert('【DOM诊断 ②｜下一帧】\\n\\n' +
+                                  'DOM消息数量 = ' + n2 + '\\n' +
+                                  '最新消息DOM存在 = ' + (e2 ? 'YES' : 'NO'));
+
+                            setTimeout(() => {
+                                const c3 = document.getElementById('chatMessages') ||
+                                           document.querySelector('#chatScreen .messages') ||
+                                           document.querySelector('.chat-messages');
+                                const n3 = c3 ? c3.children.length : 'CONTAINER_NOT_FOUND';
+                                const e3 = c3 ? !!c3.querySelector('[data-message-id="' + replyId + '"]') : false;
+
+                                alert('【DOM诊断 ③｜100ms后】\\n\\n' +
+                                      'DOM消息数量 = ' + n3 + '\\n' +
+                                      '最新消息DOM存在 = ' + (e3 ? 'YES' : 'NO'));
+
+                                let result;
+                                if (!debugLatestDom) {
+                                    result = '情况 D：appendMessage() 后立即就没有找到最新消息DOM';
+                                } else if (!e2) {
+                                    result = '情况 B：append 后有DOM，但下一帧消失，疑似立即被重新渲染/移除';
+                                } else if (!e3) {
+                                    result = '情况 C：下一帧仍有DOM，但约100ms后消失，疑似后续异步流程覆盖';
+                                } else {
+                                    result = '情况 A：①②③均存在，DOM一直存在；需要继续检查可见性/布局/其他覆盖因素';
+                                }
+
+                                alert('【DOM诊断 ④｜最终判断】\\n\\n' + result);
+                            }, 100);
+                        });
+
+                        alert('【普通回复调试 ⑬】\\n\\nchatLoader.appendMessage() 已执行完成');
                         if (chatVisible) { clearUnread(); }
                     } else {
                         alert('【普通回复调试 ⑫】\n\nappendMessage() 被跳过\n原因：实时输出条件未全部满足');
