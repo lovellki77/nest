@@ -3567,9 +3567,9 @@ function showPartnerTyping(partnerId) {
 }
 function hidePartnerTyping(partnerId) { setPartnerTyping(partnerId, false); }
 
-// 统一处理“伴侣回复完成”状态。
+// 统一处理"伴侣回复完成"状态。
 // 关键点：无论用户此刻是否仍停留在该伴侣聊天页，都必须清除对应 typing 状态。
-// 这样切换伴侣/导航栏不会把旧伴侣永久留在“正在输入”。
+// 这样切换伴侣/导航栏不会把旧伴侣永久留在"正在输入"。
 function completePartnerReply(partnerId) {
     if (!partnerId) return;
     if(window.__typingClearTimers && window.__typingClearTimers[partnerId]) { clearTimeout(window.__typingClearTimers[partnerId]); delete window.__typingClearTimers[partnerId]; }
@@ -3708,34 +3708,6 @@ function simulateReply() {
     }
 }
 
-    // ===== 临时调试面板：非阻塞，替代 alert()，方便在真机上直接看到日志 =====
-    // 排查结束后可以整段删除，或者把 window.__DEBUG_PANEL__ 设为 false 关闭。
-    window.__DEBUG_PANEL__ = true;
-    window.debugLog = function(msg) {
-        if (!window.__DEBUG_PANEL__) { console.log(msg); return; }
-        var panel = document.getElementById('__debugPanel');
-        if (!panel) {
-            panel = document.createElement('div');
-            panel.id = '__debugPanel';
-            panel.style.cssText = 'position:fixed;top:0;left:0;right:0;max-height:40vh;overflow-y:auto;' +
-                'background:rgba(0,0,0,0.85);color:#0f0;font-size:11px;font-family:monospace;' +
-                'padding:6px 8px;z-index:999999;white-space:pre-wrap;line-height:1.5;';
-            var closeBtn = document.createElement('div');
-            closeBtn.textContent = '✕ 清空/关闭';
-            closeBtn.style.cssText = 'color:#fff;background:#c0392b;display:inline-block;' +
-                'padding:2px 8px;border-radius:4px;margin-bottom:4px;cursor:pointer;font-family:sans-serif;';
-            closeBtn.onclick = function() { panel.remove(); };
-            panel.appendChild(closeBtn);
-            document.body.appendChild(panel);
-        }
-        var line = document.createElement('div');
-        var t = new Date();
-        var ts = t.toLocaleTimeString('zh-CN', { hour12:false }) + '.' + String(t.getMilliseconds()).padStart(3,'0');
-        line.textContent = '[' + ts + '] ' + msg;
-        panel.appendChild(line);
-        panel.scrollTop = panel.scrollHeight;
-    };
-
     // 发送消息（用户）
     window.sendMessage = async function() {
         var inp = document.getElementById('chatInput');
@@ -3795,38 +3767,14 @@ function simulateReply() {
                 try {
                 const replyContent = await generateReplyContent(partnerId);
 
-                // ===== A 类诊断：回复内容本身有没有生成出来 =====
-                debugLog('[REPLY idx=' + idx + '] generateReplyContent -> ' +
-                    (replyContent ? '有内容' : '空/undefined'));
-
                 if (replyContent) {
                     const replyMsg = { sender: partnerId, timestamp: Date.now(), ...replyContent };
                     const replyId = await saveMessageToDB(partnerId, replyMsg);
                     replyMsg.id = replyId;
                     notifyBarkForPartnerMessage(partnerId, replyMsg, 'user_reply');
 
-                    // ===== A 类诊断：append 的守卫条件是否通过 =====
-                    const guardPass = (state.currentPartnerId === partnerId && !!chatLoader);
-                    debugLog('[REPLY idx=' + idx + '] guard: currentPartnerId=' + state.currentPartnerId +
-                        ' / 本次回复所属partnerId=' + partnerId +
-                        ' / chatLoader=' + (chatLoader ? '存在' : '不存在') +
-                        ' -> ' + (guardPass ? '通过，将会append' : '未通过，本条回复不会显示在当前页面'));
-
-                    if (guardPass) {
+                    if (state.currentPartnerId === partnerId && chatLoader) {
                         chatLoader.appendMessage(replyMsg);
-
-                        // ===== B 类诊断：append 确认执行后，滚动容器的真实状态 =====
-                        setTimeout(function() {
-                            const c = document.getElementById('chatMessages');
-                            const r = c ? c.getBoundingClientRect() : null;
-                            debugLog('[REPLY idx=' + idx + '] append后200ms 滚动状态: ' +
-                                'scrollTop=' + (c ? Math.round(c.scrollTop) : 'N/A') +
-                                ' scrollHeight=' + (c ? Math.round(c.scrollHeight) : 'N/A') +
-                                ' clientHeight=' + (c ? Math.round(c.clientHeight) : 'N/A') +
-                                ' 距底部=' + (c ? Math.round(c.scrollHeight - c.scrollTop - c.clientHeight) : 'N/A') +
-                                ' typingIndicator display=' + (document.getElementById('typingIndicator') ? getComputedStyle(document.getElementById('typingIndicator')).display : 'N/A'));
-                        }, 200);
-
                         if (!document.getElementById('chatScreen').classList.contains('hidden')) { clearUnread(); }
                     }
                 }
@@ -3840,8 +3788,6 @@ function simulateReply() {
                 }
                 } catch(e) {
                     console.error('[REPLY] reply generation failed:', e);
-                    // ===== A 类诊断：异常不再被静默吞掉 =====
-                    debugLog('[REPLY idx=' + idx + '] ❌ 异常: ' + (e && e.message ? e.message : e));
                 }
                 finally { if (idx === count - 1) completePartnerReply(partnerId); }
             }, idx * 1200);
@@ -6322,7 +6268,7 @@ async function runScheduledAutoMessage() {
         const replyId = await saveMessageToDB(randomPartner.id, replyMsg);
         replyMsg.id = replyId;
         console.log('[MSG-PROACTIVE] saved', { partnerId: randomPartner.id, id: replyId });
-        // 主动消息不显示“正在输入”，直接作为新消息到达。
+        // 主动消息不显示"正在输入"，直接作为新消息到达。
         notifyBarkForPartnerMessage(randomPartner.id, replyMsg, 'partner_proactive');
         if (randomPartner.id === state.currentPartnerId && chatLoader && chatLoader.partnerId === randomPartner.id && !document.getElementById('chatScreen').classList.contains('hidden')) {
             chatLoader.appendMessage(replyMsg);
@@ -7173,7 +7119,7 @@ async function checkAndSendAutoReply(partnerId) {
 // ==========================================================
 
 // ==========================================================
-// Bark：统一的“对方消息已生成”推送出口
+// Bark：统一的"对方消息已生成"推送出口
 // ==========================================================
 // 注意：这个函数被 sendMessage / sendEmoji / simulateReply 等多处调用，
 // 而那些调用者都在外层 IIFE 作用域，这个函数之前只是普通 function 声明，
@@ -7181,7 +7127,7 @@ async function checkAndSendAutoReply(partnerId) {
 // 把整个回复流程的 try 块中断在 appendMessage 之前。这就是"回复生成了但界面上不出现"的真正原因。
 window.notifyBarkForPartnerMessage = async function notifyBarkForPartnerMessage(partnerId, replyMsg, source) {
     try {
-        // Bark 只处理明确允许的“对方新事件”：
+        // Bark 只处理明确允许的"对方新事件"：
         // user_reply = 用户主动发送信息后，对方回复
         // partner_proactive = 对方主动消息
         // poke = 对方拍一拍
@@ -7348,7 +7294,7 @@ class KeepAliveManager {
         }
 
         setupMessageInterceptor() {
-            // Bark 推送直接挂在“对方消息写入数据库”之后，避免包装 simulateReply 的初始化时机问题。
+            // Bark 推送直接挂在"对方消息写入数据库"之后，避免包装 simulateReply 的初始化时机问题。
             this._hasIntercepted = true;
             console.log('[Bark] 消息推送采用直接消息出口监听');
         }
